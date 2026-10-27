@@ -2,7 +2,6 @@ import { allowedEmail, firebaseConfigured, firebaseOptions } from './firebaseCon
 import type { Workspace } from './types'
 
 export { firebaseConfigured }
-export { allowedEmail } from './firebaseConfig'
 export type AuthUser = import('firebase/auth').User
 
 export function isAllowedEmail(email: string | null | undefined) {
@@ -16,7 +15,7 @@ export function authErrorMessage(error: unknown) {
     'auth/configuration-not-found': 'В Firebase включи Authentication → Sign-in method → Email/Password. Это частая причина ошибки 400 при регистрации.',
     'auth/unauthorized-domain': 'Добавь andrewokop.github.io в Authentication → Settings → Authorized domains.',
     'auth/invalid-api-key': 'Firebase отклонил API key. Проверь настройки Web App в Firebase Console.',
-    'auth/email-already-in-use': 'Этот email уже зарегистрирован. Переключись на «Войти».',
+    'auth/email-already-in-use': 'Этот адрес уже зарегистрирован. Переключись на «Войти».',
     'auth/invalid-credential': 'Неверный email или пароль.',
     'auth/invalid-login-credentials': 'Неверный email или пароль.',
     'auth/weak-password': 'Пароль должен содержать не менее 6 символов.',
@@ -40,7 +39,7 @@ export async function observeAuth(callback: (user: AuthUser | null) => void) {
 }
 
 export async function authenticate(email: string, password: string, register: boolean) {
-  if (!isAllowedEmail(email)) throw new Error(`Доступ разрешён только для ${allowedEmail}.`)
+  if (!isAllowedEmail(email)) throw new Error('Этот аккаунт не разрешён для входа.')
   const [app, authSdk] = await Promise.all([getFirebaseApp(), import('firebase/auth')])
   const auth = authSdk.getAuth(app)
   if (register) {
