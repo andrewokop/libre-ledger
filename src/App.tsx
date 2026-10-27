@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Activity, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Boxes, CalendarDays, Check, ChevronDown, CircleHelp, Cloud, CloudOff, Download, Ellipsis, FileDown, Filter, LayoutDashboard, LogIn, LogOut, Menu, Plus, Search, Settings2, ShieldCheck, Sparkles, Trash2, TrendingUp, Wallet, X } from 'lucide-react'
-import { authenticate as authenticateUser, firebaseConfigured, logout, observeAuth, saveWorkspace, subscribeWorkspace, type AuthUser } from './firebase'
+import { allowedEmail, authenticate as authenticateUser, authErrorMessage, firebaseConfigured, isAllowedEmail, logout, observeAuth, saveWorkspace, subscribeWorkspace, type AuthUser } from './firebase'
 import { id, initialWorkspace, money, shortDate, today, type Model, type Purchase, type Sale, type Workspace } from './types'
 
 const FinanceChart = lazy(() => import('./FinanceChart'))
@@ -161,10 +161,20 @@ export default function App() {
     let unsubscribe: () => void = () => undefined
     let active = true
     void observeAuth((nextUser) => {
-      setUser(nextUser)
-      setSyncReady(!nextUser)
       setSyncedUid(null)
       setSyncError('')
+      if (nextUser && (!isAllowedEmail(nextUser.email) || !nextUser.emailVerified)) {
+        setUser(null)
+        setSyncReady(true)
+        setWorkspaceReady(true)
+        setNotice(isAllowedEmail(nextUser.email)
+          ? `Подтверди адрес ${allowedEmail} по ссылке из письма, затем войди снова.`
+          : `Это личное приложение. Доступ разрешён только для ${allowedEmail}.`)
+        void logout()
+        return
+      }
+      setUser(nextUser)
+      setSyncReady(!nextUser)
       if (!nextUser) {
         setActiveOwnerUid(null)
         const guest = loadWorkspace()
@@ -282,10 +292,13 @@ export default function App() {
     const data = new FormData(event.currentTarget)
     const email = String(data.get('email')); const password = String(data.get('password'))
     try {
-      await authenticateUser(email, password, loginMode === 'register')
-      setModal(null); setNotice('Вход выполнен')
+      const result = await authenticateUser(email, password, loginMode === 'register')
+      setModal(null)
+      setNotice(result === 'verification-sent'
+        ? `Отправил письмо для подтверждения на ${allowedEmail}. Подтверди email и затем войди.`
+        : 'Вход выполнен')
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Не удалось выполнить вход')
+      setNotice(authErrorMessage(error))
     }
   }
 
@@ -387,5 +400,5 @@ function ModelForm({ onSubmit, onClose }: { onSubmit: (event: FormEvent<HTMLForm
 
 function LoginForm({ configured, mode, setMode, onSubmit, onClose }: { configured: boolean; mode: 'login' | 'register'; setMode: (mode: 'login' | 'register') => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onClose: () => void }) {
   if (!configured) return <div><div className="modal-topline"><span className="modal-icon modal-sale-icon"><Cloud size={19} /></span><button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть"><X size={19} /></button></div><div className="modal-kicker">ОБЛАЧНОЕ СОХРАНЕНИЕ</div><h2>Сначала подключите Firebase</h2><p className="modal-desc">Для синхронизации бесплатно создайте проект Firebase, включите Email/Password в Authentication и Firestore. Значения Web App добавьте в `.env.local` по образцу `.env.example`.</p><div className="setup-steps"><span>1. Создайте проект на firebase.google.com</span><span>2. Включите вход Email/Password и Firestore</span><span>3. Скопируйте конфигурацию Web App в `.env.local`</span><span>4. Для GitHub Actions добавьте эти же значения в Secrets</span></div><div className="modal-actions"><button className="button button-primary" onClick={onClose}>Понятно</button></div></div>
-  return <form onSubmit={onSubmit}><div className="modal-topline"><span className="modal-icon modal-sale-icon"><Cloud size={19} /></span><button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть"><X size={19} /></button></div><div className="modal-kicker">СИНХРОНИЗАЦИЯ МЕЖДУ УСТРОЙСТВАМИ</div><h2>{mode === 'login' ? 'Войти в аккаунт' : 'Создать аккаунт'}</h2><p className="modal-desc">История и остатки доступны на всех ваших устройствах.</p><label className="form-label">Электронная почта<input name="email" type="email" placeholder="name@example.com" autoComplete="email" required /></label><label className="form-label">Пароль<input name="password" type="password" placeholder="Не менее 6 символов" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={6} required /></label><button className="mode-toggle" type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Впервые здесь? Создать аккаунт' : 'Уже есть аккаунт? Войти'}</button><div className="modal-actions"><button className="button button-quiet" type="button" onClick={onClose}>Отмена</button><button className="button button-primary" type="submit"><LogIn size={16} />{mode === 'login' ? 'Войти и синхронизировать' : 'Создать аккаунт'}</button></div></form>
+  return <form onSubmit={onSubmit}><div className="modal-topline"><span className="modal-icon modal-sale-icon"><Cloud size={19} /></span><button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть"><X size={19} /></button></div><div className="modal-kicker">ЛИЧНОЕ ОБЛАЧНОЕ СОХРАНЕНИЕ</div><h2>{mode === 'login' ? 'Войти в аккаунт' : 'Создать аккаунт'}</h2><p className="modal-desc">Доступ разрешён только для {allowedEmail}. При регистрации отправим письмо для подтверждения адреса.</p><label className="form-label">Электронная почта<input name="email" type="email" placeholder={allowedEmail} defaultValue={allowedEmail} autoComplete="email" required /></label><label className="form-label">Пароль<input name="password" type="password" placeholder="Не менее 6 символов" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={6} required /></label><button className="mode-toggle" type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Впервые здесь? Создать аккаунт' : 'Уже есть аккаунт? Войти'}</button><div className="modal-actions"><button className="button button-quiet" type="button" onClick={onClose}>Отмена</button><button className="button button-primary" type="submit"><LogIn size={16} />{mode === 'login' ? 'Войти и синхронизировать' : 'Создать аккаунт'}</button></div></form>
 }

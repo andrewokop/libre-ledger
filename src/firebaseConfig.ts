@@ -6,3 +6,5 @@ export const firebaseOptions = {
   projectId: 'freestyle-libr',
   appId: '1:409455387862:web:5137fc5007fe213b489577',
 }
+
+export const allowedEmail = 'andrewokop@gmail.com'

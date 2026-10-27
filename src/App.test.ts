@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { availableOn, derive } from './App'
+import { authErrorMessage, isAllowedEmail } from './firebase'
 import type { Workspace } from './types'
 
 const workspace: Workspace = {
@@ -40,5 +41,20 @@ describe('inventory accounting', () => {
     expect(availableOn(workspace, 'libre', '2025-12-31')).toBe(0)
     expect(availableOn(workspace, 'libre', '2026-01-05')).toBe(8)
     expect(availableOn(workspace, 'libre', '2026-01-15')).toBe(15)
+  })
+})
+
+describe('personal Firebase access', () => {
+  it('only allows the owner email, ignoring letter case and surrounding spaces', () => {
+    expect(isAllowedEmail('andrewokop@gmail.com')).toBe(true)
+    expect(isAllowedEmail(' AndrewOkop@Gmail.com ')).toBe(true)
+    expect(isAllowedEmail('someone.else@gmail.com')).toBe(false)
+    expect(isAllowedEmail(null)).toBe(false)
+  })
+
+  it('explains Firebase setup errors instead of showing an opaque HTTP 400', () => {
+    expect(authErrorMessage({ code: 'auth/operation-not-allowed' })).toContain('Email/Password')
+    expect(authErrorMessage({ code: 'auth/unauthorized-domain' })).toContain('andrewokop.github.io')
+    expect(authErrorMessage({ code: 'permission-denied' })).toContain('firestore.rules')
   })
 })
