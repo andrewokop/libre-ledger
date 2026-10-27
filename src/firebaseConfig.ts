@@ -1,15 +1,8 @@
-const env = import.meta.env
-
-export const firebaseConfigured = Boolean(
-  env.VITE_FIREBASE_API_KEY &&
-  env.VITE_FIREBASE_AUTH_DOMAIN &&
-  env.VITE_FIREBASE_PROJECT_ID &&
-  env.VITE_FIREBASE_APP_ID,
-)
+export const firebaseConfigured = true
 
 export const firebaseOptions = {
-  apiKey: env.VITE_FIREBASE_API_KEY,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: env.VITE_FIREBASE_PROJECT_ID,
-  appId: env.VITE_FIREBASE_APP_ID,
+  apiKey: 'AIzaSyATJAPilBvfC_1kQOAlGpajEJ0Vv_b6RfY',
+  authDomain: 'freestyle-libr.firebaseapp.com',
+  projectId: 'freestyle-libr',
+  appId: '1:409455387862:web:5137fc5007fe213b489577',
 }
