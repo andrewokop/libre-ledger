@@ -5,3 +5,6 @@ dist
 libre-dashboard-desktop.png
 .playwright-cli/
 output/playwright/
+
+.firebase/
+*.log

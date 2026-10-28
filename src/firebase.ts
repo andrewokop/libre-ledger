@@ -1,5 +1,7 @@
 import { allowedEmail, firebaseConfigured, firebaseOptions } from './firebaseConfig'
-import type { Workspace } from './types'
+import { id, type Workspace } from './types'
+import { GenerationError, parseWorkspace, SCHEMA_VERSION, type Action } from './domain'
+import { mergeActions, newCloud, parseCloud, toCloud, type CloudState } from './syncProtocol'
 
 export { firebaseConfigured }
 export type AuthUser = import('firebase/auth').User
@@ -42,6 +44,7 @@ export async function authenticate(email: string, password: string, register: bo
   if (!isAllowedEmail(email)) throw new Error('Этот аккаунт не разрешён для входа.')
   const [app, authSdk] = await Promise.all([getFirebaseApp(), import('firebase/auth')])
   const auth = authSdk.getAuth(app)
+  email = email.trim().toLowerCase()
   if (register) {
     const credential = await authSdk.createUserWithEmailAndPassword(auth, email, password)
     await authSdk.sendEmailVerification(credential.user)
@@ -63,14 +66,59 @@ export async function logout() {
   await authSdk.signOut(authSdk.getAuth(app))
 }
 
-export async function subscribeWorkspace(uid: string, onData: (workspace: Workspace | null) => void, onError: (error: Error) => void) {
-  const [app, { getFirestore, doc, onSnapshot }] = await Promise.all([getFirebaseApp(), import('firebase/firestore')])
-  return onSnapshot(doc(getFirestore(app), 'users', uid, 'workspace', 'main'), (snapshot) => {
-    onData(snapshot.exists() ? snapshot.data() as Workspace : null)
+export async function subscribeWorkspace(uid: string, onData: (workspace: CloudState, cached: boolean) => void, onError: (error: Error) => void) {
+  const [app, sdk] = await Promise.all([getFirebaseApp(), import('firebase/firestore')])
+  const reference = sdk.doc(sdk.getFirestore(app), 'users', uid, 'workspace', 'main')
+  let active = true
+  let initializing = false
+  const stop = sdk.onSnapshot(reference, { includeMetadataChanges: true }, (snapshot) => {
+    if (!active || snapshot.metadata.hasPendingWrites) return
+    const data = snapshot.exists() ? snapshot.data() : null
+    if (!data || data.schemaVersion !== SCHEMA_VERSION) {
+      if (snapshot.metadata.fromCache || initializing) return
+      initializing = true
+      // One-time, user-requested clean start. Old clients cannot repopulate a v2
+      // workspace when the versioned rules are deployed.
+      void sdk.runTransaction(sdk.getFirestore(app), async (transaction) => {
+        const current = await transaction.get(reference)
+        if (current.exists() && current.data().schemaVersion === SCHEMA_VERSION) return
+        const clean = newCloud(id())
+        transaction.set(reference, { ...toCloud(clean), updatedAt: sdk.serverTimestamp() })
+      }).catch((error: Error) => { if (active) onError(error) }).finally(() => { initializing = false })
+      return
+    }
+    try { onData(parseCloud(data), snapshot.metadata.fromCache) } catch (error) { onError(error as Error) }
   }, onError)
+  return () => { active = false; stop() }
 }
 
-export async function saveWorkspace(uid: string, workspace: Workspace) {
-  const [app, { getFirestore, doc, setDoc }] = await Promise.all([getFirebaseApp(), import('firebase/firestore')])
-  await setDoc(doc(getFirestore(app), 'users', uid, 'workspace', 'main'), workspace)
+export async function saveWorkspace(uid: string, generation: string, actions: Action[]) {
+  const [app, sdk] = await Promise.all([getFirebaseApp(), import('firebase/firestore')])
+  const db = sdk.getFirestore(app)
+  const reference = sdk.doc(db, 'users', uid, 'workspace', 'main')
+  return sdk.runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference)
+    if (!snapshot.exists()) throw new GenerationError()
+    const remote = parseCloud(snapshot.data())
+    const merged = mergeActions(remote, generation, actions)
+    if (merged !== remote) transaction.set(reference, { ...toCloud(merged), updatedAt: sdk.serverTimestamp() })
+    return merged
+  })
+}
+
+export async function replaceWorkspace(uid: string, generation: string, workspace: Workspace) {
+  const clean = parseWorkspace(workspace)
+  const [app, sdk] = await Promise.all([getFirebaseApp(), import('firebase/firestore')])
+  const db = sdk.getFirestore(app)
+  const reference = sdk.doc(db, 'users', uid, 'workspace', 'main')
+  const nextGeneration = id()
+  return sdk.runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference)
+    if (!snapshot.exists()) throw new GenerationError()
+    const remote = parseCloud(snapshot.data())
+    if (remote.generation !== generation) throw new GenerationError()
+    const next = { workspace: clean, generation: nextGeneration, revision: remote.revision + 1, appliedIds: [] }
+    transaction.set(reference, { ...toCloud(next), updatedAt: sdk.serverTimestamp() })
+    return next
+  })
 }
