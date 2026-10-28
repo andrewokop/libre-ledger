@@ -10,7 +10,7 @@ async (page) => {
   const workspace={models:[{id:'m1',name:'Моя модель',color:'#526df4',version:1},{id:'m2',name:'Старый цвет',color:'#75b7ee',version:1}],purchases:[{id:'p1',modelId:'m1',date:date(-5,1),quantity:100,unitPrice:4200,extra:1000,sold:0,version:1},{id:'p2',modelId:'m1',date:date(0,3),quantity:5,unitPrice:4000,extra:250,sold:0,version:1}],sales:[sale('s1',0,8,2,6500),sale('s2',0,20,1,6800),sale('s3',-1,10,3,6600),sale('s4',-2,10,3,6000),sale('s5',-3,10,2,6300)]};
   await page.evaluate(workspace=>{localStorage.clear();localStorage.setItem('libre-ledger-v2:guest',JSON.stringify({base:{workspace,generation:'finance-qa',revision:0,appliedIds:[]},pending:[],recovery:null}))},workspace);
   await page.reload();await page.locator('.finance-stage').waitFor();
-  check(JSON.stringify(await page.locator('.finance-stage .finance-label').allTextContents())===JSON.stringify(['Оборот продаж','Прибыль от продаж','Стоимость остатков']),'Financial metrics follow the intended priority');
+  check(JSON.stringify(await page.locator('.finance-stage .finance-label').allTextContents())===JSON.stringify(['Прибыль от продаж','Оборот продаж','Стоимость остатков']),'Financial metrics follow the intended priority');
   const amount=async(index)=>Number((await page.locator('.chart-totals strong').nth(index).innerText()).replace(/[^\d,.-]/g,'').replace(',','.'));
   for(const [label,expected,expenses] of [['1 месяц',19800,20250],['3 месяца',57600,20250],['6 месяцев',70200,441250]]) {
     const button=page.getByRole('button',{name:label,exact:true});await button.click();
