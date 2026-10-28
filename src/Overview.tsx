@@ -1,8 +1,9 @@
 import { lazy, Suspense, useMemo, useState, type CSSProperties } from 'react'
-import { ArrowDownLeft, ArrowRight, ArrowUpRight, Boxes, ChevronRight, CircleHelp, PackageOpen, TrendingUp } from 'lucide-react'
+import { ArrowDownLeft, ArrowRight, ArrowUpRight, Boxes, ChevronRight, PackageOpen, TrendingUp } from 'lucide-react'
 import type { derive } from './accounting'
 import { isActive, modelAccent, money, shortDate, today, type Workspace } from './types'
 import { Amount } from './ui'
+import { financeFlow, type FlowMonths } from './financeFlow'
 
 const FinanceChart = lazy(() => import('./FinanceChart'))
 type Stats = ReturnType<typeof derive>
@@ -12,54 +13,35 @@ export function Overview({ workspace, stats, onPage }: {
   stats: Stats
   onPage: (page: 'overview' | 'inventory' | 'history' | 'settings') => void
 }) {
-  const [chartMode, setChartMode] = useState<'days' | 'months'>('days')
-  const [showFlowHelp, setShowFlowHelp] = useState(false)
-  const margin = stats.revenue ? stats.profit / stats.revenue * 100 : 0
+  const [chartMonths, setChartMonths] = useState<FlowMonths>(1)
   const stock = workspace.models.map((model) => ({
     ...model, color: modelAccent(model.color),
     quantity: stats.lots.filter((lot) => lot.purchase.modelId === model.id).reduce((sum, lot) => sum + lot.remaining, 0),
     average: stats.averageCosts.get(model.id) ?? 0,
   }))
-  const chart = useMemo(() => {
-    const end = new Date(`${today()}T12:00:00`)
-    const periods = Array.from({ length: chartMode === 'days' ? 14 : 6 }, (_, index) => {
-      const date = new Date(end)
-      if (chartMode === 'days') date.setDate(end.getDate() - 13 + index)
-      else { date.setDate(1); date.setMonth(end.getMonth() - 5 + index) }
-      const key = date.toLocaleDateString('en-CA').slice(0, chartMode === 'days' ? 10 : 7)
-      return { key, month: new Intl.DateTimeFormat('ru-RU', chartMode === 'days' ? { day: 'numeric', month: 'short' } : { month: 'short' }).format(date).replace('.', ''), sales: 0, expenses: 0 }
-    })
-    const byKey = new Map(periods.map((period) => [period.key, period]))
-    for (const sale of workspace.sales.filter(isActive)) {
-      const period = byKey.get(sale.date.slice(0, chartMode === 'days' ? 10 : 7))
-      if (period) period.sales += sale.quantity * sale.unitPrice
-    }
-    for (const purchase of workspace.purchases.filter(isActive)) {
-      const period = byKey.get(purchase.date.slice(0, chartMode === 'days' ? 10 : 7))
-      if (period) period.expenses += purchase.quantity * purchase.unitPrice + purchase.extra
-    }
-    return periods
-  }, [workspace, chartMode])
-  const chartSales = chart.reduce((sum, item) => sum + item.sales, 0)
-  const chartExpenses = chart.reduce((sum, item) => sum + item.expenses, 0)
+  const currentDate = today()
+  const flow = useMemo(() => financeFlow(workspace, chartMonths, currentDate), [workspace, chartMonths, currentDate])
+  const chartSales = flow.sales
+  const chartExpenses = flow.expenses
   const activeLots = stats.lots.filter((lot) => lot.remaining > 0).length
 
   return <div className={`overview-content ${[stats.revenue, stats.profit, stats.stockValue, chartSales, chartExpenses].some((amount) => money(amount).length > 12) ? 'overview-long-values' : ''}`} >
     <section className="finance-stage" aria-label="Финансовые показатели за всё время">
       <div className="finance-stage-head"><span>Финансовая картина</span><span className="period-label">За всё время</span></div>
-      <div className="finance-revenue"><span className="finance-label">Выручка</span><strong className="revenue-value" style={{ '--amount-length': money(stats.revenue).length + 2 } as CSSProperties}><Amount value={stats.revenue} /></strong><span className="finance-detail">Продано {workspace.sales.filter(isActive).reduce((sum, sale) => sum + sale.quantity, 0)} шт.</span></div>
-      <div className="finance-profit"><span className="finance-label"><TrendingUp size={19} />Прибыль от продаж</span><strong style={{ '--amount-length': money(stats.profit).length + 2 } as CSSProperties}><Amount value={stats.profit} /></strong><span className="finance-detail">После себестоимости товара</span></div>
-      <button className="finance-capital" onClick={() => onPage('inventory')}><span className="finance-label"><Boxes size={19} />Деньги в товаре<ChevronRight size={17} /></span><strong style={{ '--amount-length': money(stats.stockValue).length + 2 } as CSSProperties}><Amount value={stats.stockValue} /></strong><span className="finance-detail">Вложено в текущие остатки</span></button>
-      <div className="revenue-composition"><div className="composition-bar" aria-label={`Прибыль составляет ${margin.toFixed(1)}% выручки`}><span style={{ width: `${Math.max(0, Math.min(margin, 100))}%` }} /></div><div className="composition-labels"><span><i />Себестоимость <b>{money(stats.cogs)} ₽</b></span><span><i />Маржинальность <b>{margin.toFixed(1).replace('.', ',')}%</b></span></div></div>
+      <div className="finance-revenue"><span className="finance-label">Оборот продаж</span><strong className="revenue-value" style={{ '--amount-length': money(stats.revenue).length + 2 } as CSSProperties}><Amount value={stats.revenue} /></strong><span className="finance-detail">Сумма всех продаж до вычета себестоимости.</span><span className="finance-sales-count">Продано {workspace.sales.filter(isActive).reduce((sum, sale) => sum + sale.quantity, 0)} шт.</span></div>
+      <div className="finance-profit"><span className="finance-label"><TrendingUp size={19} />Прибыль от продаж</span><strong style={{ '--amount-length': money(stats.profit).length + 2 } as CSSProperties}><Amount value={stats.profit} /></strong><span className="finance-detail">Оборот минус закупочная стоимость и доставка проданных товаров.</span></div>
+      <button className="finance-capital" onClick={() => onPage('inventory')}><span className="finance-label"><Boxes size={19} />Стоимость остатков<ChevronRight size={17} /></span><strong style={{ '--amount-length': money(stats.stockValue).length + 2 } as CSSProperties}><Amount value={stats.stockValue} /></strong><span className="finance-detail">Закупочная стоимость и доставка товара, который ещё на складе.</span></button>
     </section>
 
     <div className="overview-grid">
       <section className="panel chart-panel" aria-labelledby="flow-title">
-        <div className="panel-head"><h2 id="flow-title">Движение денег</h2><div className="segmented-control" aria-label="Период графика"><button aria-pressed={chartMode === 'days'} onClick={() => setChartMode('days')}>14 дней</button><button aria-pressed={chartMode === 'months'} onClick={() => setChartMode('months')}>6 месяцев</button></div></div>
-        <div className="chart-totals"><div><span><i className="legend-dot legend-sales" />Продажи</span><strong><Amount value={chartSales} /></strong></div><div><span><i className="legend-dot legend-expenses" />Закупки</span><strong><Amount value={chartExpenses} /></strong></div></div>
-        {chartSales || chartExpenses ? <Suspense fallback={<div className="chart-placeholder" aria-label="Загрузка графика" />}><FinanceChart data={chart} /></Suspense> : <div className="chart-empty"><ArrowLeftRightGraphic /><strong>В этом периоде пока тихо</strong><span>Ваши продажи и закупки появятся здесь.</span></div>}
-        <div className="chart-foot"><button className="flow-help" aria-expanded={showFlowHelp} aria-controls="flow-help" onClick={() => setShowFlowHelp(!showFlowHelp)}>Разница за период <CircleHelp size={17} /></button><strong className={chartSales - chartExpenses >= 0 ? 'positive-text' : 'negative-text'}><Amount value={chartSales - chartExpenses} signed /></strong></div>
-        {showFlowHelp && <p id="flow-help" className="flow-explanation">Продажи минус закупки и доставка за выбранный период. Разница может быть отрицательной, пока деньги находятся в товаре. Прибыль от продаж показана выше.</p>}
+        <div className="panel-head"><div><h2 id="flow-title">Продажи и закупки</h2><p className="flow-range">{flow.range}</p></div><div className="segmented-control" role="group" aria-label="Период графика">{([[1, '1 месяц'], [3, '3 месяца'], [6, '6 месяцев']] as const).map(([months, label]) => <button key={months} aria-pressed={chartMonths === months} onClick={() => setChartMonths(months)}>{label}</button>)}</div></div>
+        <div className="chart-totals"><div><span><i className="legend-dot legend-sales" />Продажи</span><strong><Amount value={chartSales} /></strong></div><div><span><i className="legend-dot legend-expenses" />Закупки и доставка</span><strong><Amount value={chartExpenses} /></strong></div></div>
+        <p className="flow-caption">{chartMonths === 1 ? 'Текущий месяц по неделям' : 'Сравнение по месяцам'}. Суммы в рублях.</p>
+        {chartSales || chartExpenses ? <Suspense fallback={<div className="chart-placeholder" aria-label="Загрузка графика" />}><FinanceChart data={flow.periods} /></Suspense> : <div className="chart-empty"><ArrowLeftRightGraphic /><strong>За этот период операций нет</strong><span>Выберите другой период или добавьте операцию.</span></div>}
+        <div className="chart-foot"><span>Продажи минус закупки</span><strong className={chartSales - chartExpenses >= 0 ? 'positive-text' : 'negative-text'}><Amount value={chartSales - chartExpenses} signed /></strong></div>
+        <p className="flow-explanation">Здесь закупки учтены целиком, включая товар на складе. Прибыль только от проданных товаров показана выше.</p>
+        {(chartSales > 0 || chartExpenses > 0) && <details className="flow-data"><summary>Точные суммы {chartMonths === 1 ? 'по неделям' : 'по месяцам'}</summary><table className="flow-table"><caption>{flow.range}</caption><thead><tr><th scope="col">Период</th><th scope="col">Продажи</th><th scope="col">Закупки и доставка</th></tr></thead><tbody>{flow.periods.map((period) => <tr key={period.key}><th scope="row">{period.range}</th><td data-label="Продажи"><span><Amount value={period.sales} /></span></td><td data-label="Закупки и доставка"><span><Amount value={period.expenses} /></span></td></tr>)}</tbody></table></details>}
       </section>
 
       <section className="stock-panel" aria-labelledby="stock-title">
