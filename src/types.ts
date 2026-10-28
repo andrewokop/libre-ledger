@@ -13,10 +13,10 @@ export type Workspace = { models: Model[]; purchases: Purchase[]; sales: Sale[] 
 
 export const initialWorkspace: Workspace = {
   models: [
-    { id: 'libre-2', name: 'FreeStyle Libre 2', color: '#789c8b' },
-    { id: 'libre-2-plus', name: 'FreeStyle Libre 2 Plus', color: '#b89569' },
-    { id: 'libre-3', name: 'FreeStyle Libre 3', color: '#8290a6' },
-    { id: 'libre-3-plus', name: 'FreeStyle Libre 3 Plus', color: '#b27c72' },
+    { id: 'libre-2', name: 'FreeStyle Libre 2', color: '#526df4' },
+    { id: 'libre-2-plus', name: 'FreeStyle Libre 2 Plus', color: '#f5a66b' },
+    { id: 'libre-3', name: 'FreeStyle Libre 3', color: '#a493eb' },
+    { id: 'libre-3-plus', name: 'FreeStyle Libre 3 Plus', color: '#75b7ee' },
   ],
   purchases: [
     { id: 'p1', modelId: 'libre-2', date: '2026-10-01', quantity: 12, unitPrice: 2470, extra: 920, sold: 8 },
@@ -44,3 +44,6 @@ export const today = () => new Date().toLocaleDateString('en-CA')
 export const money = (value: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(value))
 export const shortDate = (date: string) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(new Date(`${date}T12:00:00`))
 export const id = () => crypto.randomUUID()
+
+// Keep saved model identifiers and records; refresh the former interface palette at render time.
+export const modelAccent = (color: string) => ({ '#789c8b': '#526df4', '#b89569': '#f5a66b', '#8290a6': '#a493eb', '#b27c72': '#75b7ee', '#827a9a': '#bd83cf' }[color.toLowerCase()] ?? color)

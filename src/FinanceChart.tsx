@@ -1,5 +1,6 @@
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { money } from './types'
+import { useReducedMotion } from './ui'
 
 type MonthFlow = { month: string; sales: number; expenses: number }
 
@@ -9,5 +10,6 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 export default function FinanceChart({ data }: { data: MonthFlow[] }) {
-  return <div className="chart-wrap" role="img" aria-label="Сравнение продаж и расходов на закупки за выбранный период"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} margin={{ top: 12, right: 0, left: -20, bottom: 4 }} barGap={3} barCategoryGap="24%"><CartesianGrid vertical={false} stroke="#e8e9e2" strokeDasharray="3 5" /><XAxis dataKey="month" axisLine={false} tickLine={false} minTickGap={22} tick={{ fill: '#7c8278', fontSize: 11 }} dy={10} /><YAxis axisLine={false} tickLine={false} tickCount={4} tick={{ fill: '#7c8278', fontSize: 11 }} tickFormatter={(value: number) => value >= 1000 ? `${Math.round(value / 1000)}к` : String(value)} /><Tooltip cursor={{ fill: '#f2f3ed', radius: 5 }} content={<ChartTooltip />} /><Bar dataKey="sales" name="Продажи" fill="#326451" radius={[4, 4, 0, 0]} maxBarSize={24} /><Bar dataKey="expenses" name="Закупки и доставка" fill="#c5c4e2" radius={[4, 4, 0, 0]} maxBarSize={24} /></BarChart></ResponsiveContainer></div>
+  const reducedMotion = useReducedMotion()
+  return <div className="chart-wrap" role="img" aria-label="Продажи показаны синими столбцами, закупки и доставка — оранжевой линией"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={data} margin={{ top: 15, right: 8, left: -20, bottom: 6 }} barCategoryGap="30%"><CartesianGrid vertical={false} stroke="#e9ebf4" strokeDasharray="3 5" /><XAxis dataKey="month" axisLine={false} tickLine={false} minTickGap={32} tick={{ fill: '#6d7490', fontSize: 14 }} dy={12} /><YAxis axisLine={false} tickLine={false} tickCount={4} tick={{ fill: '#6d7490', fontSize: 14 }} tickFormatter={(value: number) => value >= 1000 ? `${Math.round(value / 1000)}к` : String(value)} /><Tooltip cursor={{ fill: '#f0f2ff', radius: 6 }} content={<ChartTooltip />} /><Bar dataKey="sales" name="Продажи" fill="#5267ee" radius={[5, 5, 0, 0]} maxBarSize={30} isAnimationActive={!reducedMotion} animationDuration={600} /><Line type="linear" dataKey="expenses" name="Закупки и доставка" stroke="#cf713f" strokeWidth={2.5} dot={{ r: 3, fill: '#fff', stroke: '#cf713f', strokeWidth: 2 }} activeDot={{ r: 5 }} isAnimationActive={!reducedMotion} animationDuration={700} /></ComposedChart></ResponsiveContainer></div>
 }
