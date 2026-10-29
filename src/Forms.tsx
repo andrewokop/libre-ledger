@@ -66,6 +66,14 @@ export function ModalShell({
       const elements = focusable()
       const first = elements[0]
       const last = elements[elements.length - 1]
+      if (
+        !(document.activeElement instanceof HTMLElement) ||
+        !elements.includes(document.activeElement)
+      ) {
+        event.preventDefault()
+        ;(event.shiftKey ? last : first)?.focus()
+        return
+      }
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault()
         last?.focus()

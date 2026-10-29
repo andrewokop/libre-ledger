@@ -68,6 +68,7 @@ npx --yes --package @playwright/cli playwright-cli -s=ledger-check open http://1
 npx --yes --package @playwright/cli playwright-cli -s=ledger-check run-code --filename tests/management.browser.js
 npx --yes --package @playwright/cli playwright-cli -s=ledger-check run-code --filename tests/finance.browser.js
 npx --yes --package @playwright/cli playwright-cli -s=ledger-check run-code --filename tests/readability.browser.js
+npx --yes --package @playwright/cli playwright-cli -s=ledger-check run-code --filename tests/dialog.browser.js
 ```
 
 Сценарии работают только с локальным сервером и тестовым гостевым учётом. Они меняют его содержимое. Не используйте сессию с рабочей авторизацией. Проверяются партии, сроки, бесплатные передачи, списания, настройки, резервная копия, сверка, график и читаемость 320–1920 px с тремя размерами текста.
