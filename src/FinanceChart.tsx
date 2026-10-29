@@ -19,45 +19,17 @@ function axisAmount(value: number) {
 
 export default function FinanceChart({
   data,
-  unit,
-  selected,
-  onSelect
+  unit
 }: {
   data: FlowPeriod[]
   unit: 'rub' | 'quantity'
-  selected: number
-  onSelect: (index: number) => void
 }) {
-  function selectAt(clientX: number, element: HTMLDivElement) {
-    const bounds = element.getBoundingClientRect()
-    const scale = element.clientWidth ? bounds.width / element.clientWidth : 1
-    const fraction = Math.max(
-      0,
-      Math.min(
-        1,
-        (clientX - bounds.left - 65 * scale) /
-          Math.max(1, bounds.width - 77 * scale)
-      )
-    )
-    onSelect(Math.round(fraction * (data.length - 1)))
-  }
   return (
-    <div
-      className="v3-chart-wrap"
-      aria-label="Линейный график продаж"
-      onPointerDown={(event) => selectAt(event.clientX, event.currentTarget)}
-      onPointerMove={(event) => selectAt(event.clientX, event.currentTarget)}
-      onTouchStart={(event) => {
-        if (event.touches[0])
-          selectAt(event.touches[0].clientX, event.currentTarget)
-      }}
-      onTouchMove={(event) => {
-        if (event.touches[0])
-          selectAt(event.touches[0].clientX, event.currentTarget)
-      }}
-    >
+    <div className="v3-chart-wrap" aria-label="Линейный график продаж">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart
+          accessibilityLayer
+          aria-label="Продажи: используйте стрелки для просмотра значений"
           data={data}
           margin={{ top: 16, right: 12, left: 0, bottom: 8 }}
         >
@@ -83,27 +55,33 @@ export default function FinanceChart({
             tickFormatter={axisAmount}
             allowDecimals={unit === 'rub'}
           />
-          <Tooltip content={() => null} cursor={{ stroke: '#aab5d9' }} />
+          <Tooltip
+            isAnimationActive={false}
+            wrapperStyle={{ maxWidth: '100%' }}
+            cursor={{ stroke: '#aab5d9' }}
+            content={({ active, payload }) => {
+              const point: FlowPeriod | undefined = payload?.[0]?.payload
+              return active && point ? (
+                <div className="v3-chart-tooltip" role="status">
+                  <span>{point.range}</span>
+                  <strong>{money(point.sales)} ₽</strong>
+                  <span>{point.quantity} шт.</span>
+                </div>
+              ) : null
+            }}
+          />
           <Line
             type="linear"
             dataKey={unit === 'rub' ? 'sales' : 'quantity'}
             stroke="#3d4dc2"
             strokeWidth={3}
-            dot={(props: { cx?: number; cy?: number; index?: number }) =>
-              props.index === selected ? (
-                <circle
-                  key={props.index}
-                  cx={props.cx}
-                  cy={props.cy}
-                  r={5}
-                  fill="#fff"
-                  stroke="#3d4dc2"
-                  strokeWidth={3}
-                />
-              ) : (
-                <circle key={props.index} cx={props.cx} cy={props.cy} r={0} />
-              )
-            }
+            dot={false}
+            activeDot={{
+              r: 5,
+              fill: '#fff',
+              stroke: '#3d4dc2',
+              strokeWidth: 3
+            }}
             isAnimationActive={false}
           />
         </LineChart>

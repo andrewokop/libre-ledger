@@ -40,20 +40,11 @@ export function Overview({
     settings.chartMonths
   )
   const [unit, setUnit] = useState<'rub' | 'quantity'>(settings.chartUnit)
-  const [selected, setSelected] = useState<number | null>(null)
   const currentDate = today()
   const flow = useMemo(
     () => salesFlow(workspace, chartMonths, currentDate),
     [workspace, chartMonths, currentDate]
   )
-  const selectedIndex =
-    selected === null
-      ? Math.max(
-          0,
-          flow.periods.map((period) => period.count > 0).lastIndexOf(true)
-        )
-      : Math.min(selected, flow.periods.length - 1)
-  const point = flow.periods[selectedIndex]
   const salesQuantity = workspace.sales
     .filter(isActive)
     .reduce((sum, sale) => sum + sale.quantity, 0)
@@ -179,7 +170,6 @@ export function Overview({
                 aria-pressed={chartMonths === months}
                 onClick={() => {
                   setChartMonths(months)
-                  setSelected(null)
                 }}
               >
                 {label}
@@ -211,40 +201,13 @@ export function Overview({
           </div>
         </div>
         {flow.count ? (
-          <>
-            <Suspense
-              fallback={
-                <div className="v3-chart-wrap" aria-label="Загрузка графика" />
-              }
-            >
-              <FinanceChart
-                data={flow.periods}
-                unit={unit}
-                selected={selectedIndex}
-                onSelect={setSelected}
-              />
-            </Suspense>
-            <div className="v3-point" aria-live="polite">
-              <span>{point.range}</span>
-              <strong>
-                {money(point.sales)} ₽ · {point.quantity} шт.
-              </strong>
-              <span>
-                {point.count ? `Операций: ${point.count}` : 'Нет продаж'}
-              </span>
-            </div>
-            <label className="v3-slider">
-              Выберите {chartMonths === 1 ? 'день' : 'неделю'}{' '}
-              <input
-                type="range"
-                min="0"
-                max={flow.periods.length - 1}
-                value={selectedIndex}
-                onChange={(event) => setSelected(Number(event.target.value))}
-                aria-valuetext={`${point.range}: ${money(point.sales)} рублей, ${point.quantity} штук, операций ${point.count}`}
-              />
-            </label>
-          </>
+          <Suspense
+            fallback={
+              <div className="v3-chart-wrap" aria-label="Загрузка графика" />
+            }
+          >
+            <FinanceChart data={flow.periods} unit={unit} />
+          </Suspense>
         ) : (
           <div className="v3-empty">За этот период продаж нет</div>
         )}

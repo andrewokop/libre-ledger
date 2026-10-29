@@ -33,7 +33,7 @@ async (page) => {
   let w = await workspace(); check(w.purchases.length === 3 && w.purchases.map(p => p.quantity).join(',') === '2,2,1' && w.purchases.map(p => p.extra).join(',') === '0,0,0', 'Batch preserves expiries with zero delivery costs');
   await go('Склад'); await page.locator('.lot-group').filter({hasText:'25-04-2027'}).locator('summary').click();
   await page.locator('.lot-group').filter({hasText:'25-04-2027'}).getByRole('button',{name:'Продать'}).click();
-  check(!(await modal.locator('.lot-picker').innerText()).includes('Выбрано '), 'Sale lot list has no trailing summary row');
+  check(!(await modal.locator('.lot-picker').innerText()).includes('Выбрано ') && !(await modal.locator('.allocation-row').allInnerTexts()).join(' ').includes('закупка'), 'Sale lot list shows only expiry and quantity without purchase dates or summary');
   check(await modal.locator('[name=unitPrice]').inputValue() === '0', 'Sale uses explicit zero default');
   await modal.locator('[name=quantity]').fill('3');
   let alloc = JSON.parse(await modal.locator('[name=allocations]').inputValue());

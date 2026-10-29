@@ -506,10 +506,11 @@ export function EntryForm({
                   {expiredOn(lot.expiry, date)
                     ? ' · просрочено на дату операции'
                     : ''}{' '}
-                  · закупка {lot.date} · доступно {remaining} шт.
+                  {writeoff && <>· закупка {lot.date} </>}· доступно {remaining}{' '}
+                  шт.
                 </span>
                 <input
-                  aria-label={`Количество из партии ${expiryLabel(lot.expiry)} от ${lot.date}`}
+                  aria-label={`Количество из партии ${expiryLabel(lot.expiry)}${writeoff ? ` от ${lot.date}` : ''}`}
                   type="number"
                   min="0"
                   max={remaining}
