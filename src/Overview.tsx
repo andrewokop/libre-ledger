@@ -9,6 +9,7 @@ import type { derive } from './accounting'
 import {
   expiredOn,
   expiryLabel,
+  expiryEnd,
   expirySoon,
   isActive,
   money,
@@ -89,7 +90,7 @@ export function Overview({
           ))
     )
     .sort((a, b) =>
-      (a.purchase.expiry ?? '').localeCompare(b.purchase.expiry ?? '')
+      expiryEnd(a.purchase.expiry!).localeCompare(expiryEnd(b.purchase.expiry!))
     )
   const metrics = [
     { id: 'profit', label: 'Прибыль', amount: stats.profit, detail: '' },

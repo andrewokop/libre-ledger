@@ -3,6 +3,7 @@ import { Boxes, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { derive } from './accounting'
 import {
   expiryLabel,
+  expiryEnd,
   expiredOn,
   expirySoon,
   settingsFor,
@@ -66,11 +67,12 @@ export function Inventory({
             lot.purchase.expiry,
             settingsFor(workspace).expiryWarningDays
           )) ||
-        (expiryFilter === 'exact' && lot.purchase.expiry === month))
+        (expiryFilter === 'exact' &&
+          lot.purchase.expiry?.slice(0, 7) === month))
   )
   const groups = new Map<string, typeof filtered>()
   for (const lot of filtered) {
-    const key = `${lot.purchase.modelId}|${lot.purchase.expiry ?? ''}`
+    const key = `${lot.purchase.modelId}|${lot.purchase.expiry ? expiryEnd(lot.purchase.expiry) : ''}`
     groups.set(key, [...(groups.get(key) ?? []), lot])
   }
   return (

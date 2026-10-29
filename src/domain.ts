@@ -3,6 +3,7 @@ import {
   EMPTY_WORKSPACE,
   DEFAULT_SETTINGS,
   expiredOn,
+  expiryEnd,
   isActive,
   settingsFor,
   today,
@@ -163,9 +164,14 @@ function version(value: unknown) {
 }
 function expiry(value: unknown) {
   if (value === undefined || value === '') return undefined
-  const result = text(value, 7, 'Годен до')
-  if (!/^(20\d{2}|2100)-(0[1-9]|1[0-2])$/.test(result))
-    throw Error('Укажите срок в формате месяц и год.')
+  const result = text(value, 10, 'Годен до')
+  if (
+    !/^(20\d{2}|2100)-(0[1-9]|1[0-2])(-\d{2})?$/.test(result) ||
+    (result.length === 10 &&
+      (!Number.isFinite(Date.parse(`${result}T12:00:00Z`)) ||
+        new Date(`${result}T12:00:00Z`).toISOString().slice(0, 10) !== result))
+  )
+    throw Error('Укажите существующий срок в формате ДД-ММ-ГГГГ.')
   return result
 }
 function allocations(value: unknown): Allocation[] {
@@ -583,8 +589,11 @@ export function availableLots(
     }))
     .sort(
       (a, b) =>
-        (a.purchase.expiry ?? '9999-99').localeCompare(
-          b.purchase.expiry ?? '9999-99'
+        (a.purchase.expiry
+          ? expiryEnd(a.purchase.expiry)
+          : '9999-12-31'
+        ).localeCompare(
+          b.purchase.expiry ? expiryEnd(b.purchase.expiry) : '9999-12-31'
         ) ||
         a.purchase.date.localeCompare(b.purchase.date) ||
         a.purchase.id.localeCompare(b.purchase.id)

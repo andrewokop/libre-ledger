@@ -121,6 +121,41 @@ export function FormError({ message }: { message: string }) {
   ) : null
 }
 
+function ExpiryInput({
+  value,
+  onChange,
+  name
+}: {
+  value: string
+  onChange: (value: string) => void
+  name?: string
+}) {
+  return (
+    <>
+      <input
+        type="text"
+        inputMode="numeric"
+        placeholder="ДД-ММ-ГГГГ"
+        pattern="[0-9]{2}-[0-9]{2}-[0-9]{4}"
+        title="Дата в формате ДД-ММ-ГГГГ"
+        maxLength={10}
+        value={
+          /^\d{4}-\d{2}(-\d{2})?$/.test(value) ? expiryLabel(value) : value
+        }
+        onChange={(event) => {
+          const formatted = event.target.value
+            .replace(/\D/g, '')
+            .slice(0, 8)
+            .replace(/^(\d{2})(\d)/, '$1-$2')
+            .replace(/^(\d{2}-\d{2})(\d)/, '$1-$2')
+          onChange(formatted.replace(/^(\d{2})-(\d{2})-(\d{4})$/, '$3-$2-$1'))
+        }}
+      />
+      {name && <input type="hidden" name={name} value={value} />}
+    </>
+  )
+}
+
 export function EntryForm({
   type,
   models,
@@ -169,6 +204,9 @@ export function EntryForm({
     entry && 'extra' in entry ? String(entry.extra) : '0'
   )
   const [rows, setRows] = useState([{ quantity: '1', expiry: '' }])
+  const [expiryDate, setExpiryDate] = useState(
+    entry && 'expiry' in entry ? (entry.expiry ?? '') : ''
+  )
   const ref =
     entry && !purchase
       ? { type: type as 'sale' | 'writeoff', id: entry.id }
@@ -244,7 +282,6 @@ export function EntryForm({
       .replace('Новая закупку', 'Новая закупка')
       .replace('Новая продажу', 'Новая продажа')
       .replace('Новая списание', 'Новое списание')
-  const allocated = allocations.reduce((sum, a) => sum + a.quantity, 0)
   return (
     <form onSubmit={onSubmit}>
       <div className="modal-topline">
@@ -378,14 +415,11 @@ export function EntryForm({
           {entry ? (
             <label className="form-label">
               Годен до <span className="optional-label">необязательно</span>
-              <input
+              <ExpiryInput
                 name="expiry"
-                type="month"
-                defaultValue={'expiry' in entry ? (entry.expiry ?? '') : ''}
+                value={expiryDate}
+                onChange={setExpiryDate}
               />
-              <span className="field-help">
-                Например, 03.2027; до конца месяца.
-              </span>
             </label>
           ) : (
             <div className="lot-picker">
@@ -416,13 +450,12 @@ export function EntryForm({
                   )}
                   <label>
                     Годен до
-                    <input
-                      type="month"
+                    <ExpiryInput
                       value={row.expiry}
-                      onChange={(e) =>
+                      onChange={(expiry) =>
                         setRows(
                           rows.map((r, i) =>
-                            i === index ? { ...r, expiry: e.target.value } : r
+                            i === index ? { ...r, expiry } : r
                           )
                         )
                       }
@@ -443,9 +476,7 @@ export function EntryForm({
                   )}
                 </div>
               ))}
-              <span className="field-help">
-                Необязательно. Например, 03.2027; до конца месяца.
-              </span>
+              <span className="field-help">Срок указывать необязательно.</span>
               <button
                 type="button"
                 className="text-link"
@@ -527,9 +558,6 @@ export function EntryForm({
                 />
               </label>
             ))}
-            <span className="field-help">
-              Выбрано {allocated} из {quantity} шт.
-            </span>
             <input
               type="hidden"
               name="allocations"

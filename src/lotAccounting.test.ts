@@ -14,6 +14,7 @@ import {
   DEFAULT_SETTINGS,
   expiredOn,
   expiryEnd,
+  expiryLabel,
   type Purchase,
   type Sale,
   type Workspace,
@@ -178,19 +179,69 @@ describe('actual lot accounting', () => {
 })
 
 describe('expiry and lot constraints', () => {
-  it('accepts month/year in the future or absent and rejects malformed values; expiry ends on the last day', () => {
+  it('accepts precise expiry dates and keeps legacy month deadlines unchanged', () => {
     expect(
       parseWorkspace(
-        workspace([purchase('a', 1, 1, 0, '2099-12'), purchase('b', 1, 1)])
+        workspace([
+          purchase('a', 1, 1, 0, '2099-12'),
+          purchase('b', 1, 1),
+          purchase('c', 1, 1, 0, '2028-02-29')
+        ])
       ).purchases.map((p) => p.expiry)
-    ).toEqual(['2099-12', undefined])
-    for (const expiry of ['2025-00', '2025-13', '2025-1', '2025-02-01'])
+    ).toEqual(['2099-12', undefined, '2028-02-29'])
+    for (const expiry of [
+      '2025-00',
+      '2025-13',
+      '2025-1',
+      '2025-02-29',
+      '2025-04-31',
+      '2025-03-00',
+      '2100-02-29',
+      '15-03-2027'
+    ])
       expect(() =>
         parseWorkspace(workspace([purchase('p', 1, 1, 0, expiry)]))
       ).toThrow()
     expect(expiryEnd('2024-02')).toBe('2024-02-29')
     expect(expiredOn('2024-02', '2024-02-29')).toBe(false)
     expect(expiredOn('2024-02', '2024-03-01')).toBe(true)
+    expect(expiryLabel('2024-02')).toBe('29-02-2024')
+    expect(expiryLabel('2027-03-15')).toBe('15-03-2027')
+    expect(expiryLabel()).toBe('Срок не указан')
+    expect(expiredOn('2027-03-15', '2027-03-15')).toBe(false)
+    expect(expiredOn('2027-03-15', '2027-03-16')).toBe(true)
+  })
+  it('uses actual deadline order across legacy months and precise dates and syncs them without conversion', () => {
+    const data = workspace([
+      purchase('month', 1, 1, 0, '2027-03'),
+      purchase('late', 1, 1, 0, '2027-03-25'),
+      purchase('early', 1, 1, 0, '2027-03-15')
+    ])
+    expect(suggestAllocations(data, 'm', '2027-03-01', 3)).toEqual([
+      alloc('early', 1),
+      alloc('late', 1),
+      alloc('month', 1)
+    ])
+    const actions = data.purchases.map((entry) => ({
+      id: entry.id,
+      kind: 'purchase/save' as const,
+      entry,
+      expected: null
+    }))
+    const cloud = newCloud('expiry-sync')
+    cloud.workspace.models = [model]
+    const synced = mergeActions(cloud, 'expiry-sync', actions)
+    const restored = parseBackup(
+      JSON.parse(
+        JSON.stringify({ schemaVersion: 3, workspace: synced.workspace })
+      )
+    )
+    expect(restored.purchases.map((p) => p.expiry)).toEqual([
+      '2027-03',
+      '2027-03-25',
+      '2027-03-15'
+    ])
+    expect(derive(restored).stockValue).toBe(3)
   })
   it('reserves later allocations and offers an edited sale its own units', () => {
     const data = workspace(

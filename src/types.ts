@@ -108,13 +108,14 @@ export const shortDate = (date: string) =>
   new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(
     new Date(`${date}T12:00:00`)
   )
-export const expiryLabel = (expiry?: string) =>
-  expiry ? `${expiry.slice(5)}.${expiry.slice(0, 4)}` : 'Срок не указан'
 export const expiryEnd = (expiry: string) => {
+  if (expiry.length === 10) return expiry
   const [year, month] = expiry.split('-').map(Number)
   const last = new Date(year, month, 0, 12)
   return `${expiry}-${String(last.getDate()).padStart(2, '0')}`
 }
+export const expiryLabel = (expiry?: string) =>
+  expiry ? expiryEnd(expiry).split('-').reverse().join('-') : 'Срок не указан'
 export const expiredOn = (expiry: string | undefined, date = today()) =>
   !!expiry && expiryEnd(expiry) < date
 export const expirySoon = (
