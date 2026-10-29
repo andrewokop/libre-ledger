@@ -17,7 +17,7 @@ async (page) => {
   await modal.getByRole('button', { name: 'Добавить модель' }).click();
   check((await workspace()).models[0].salePrice === 0, 'Model retains zero default price');
   await page.getByRole('button', { name: 'Добавить первую закупку' }).click();
-  await modal.locator('[name=unitPrice]').fill('100'); await modal.locator('[name=extra]').fill('0.05');
+  await modal.locator('[name=unitPrice]').fill('100');
   await modal.locator('.lot-row input[placeholder="ДД-ММ-ГГГГ"]').pressSequentially('15032027');
   check(await modal.locator('.lot-row input[placeholder="ДД-ММ-ГГГГ"]').inputValue() === '15-03-2027', 'Numeric keyboard input inserts day-month-year separators');
   await modal.getByRole('button', { name: '+ Добавить срок' }).click();
@@ -28,9 +28,9 @@ async (page) => {
   await modal.locator('.lot-row').nth(2).locator('input[type=number]').fill('1');
   await modal.locator('.lot-row').nth(2).locator('input[placeholder="ДД-ММ-ГГГГ"]').fill('31-05-2027');
   check(await modal.locator('.lot-row').nth(0).locator('input[type=number]').inputValue() === '2', 'Adding third expiry preserves edited first quantity');
-  check((await modal.locator('.lot-row').allInnerTexts()).map(x => x.includes('0.02') || x.includes('0.01')).every(Boolean), 'Delivery split preview shown per lot');
+  check(await modal.locator('[name=extra]').getAttribute('type') === 'hidden' && !(await modal.innerText()).includes('Доставка'), 'Purchase form has no delivery field or preview');
   await save(); await modal.waitFor({ state: 'hidden' });
-  let w = await workspace(); check(w.purchases.length === 3 && w.purchases.map(p => p.quantity).join(',') === '2,2,1' && w.purchases.map(p => p.extra).join(',') === '0.02,0.02,0.01', 'Batch preserves expiries and splits delivery cents');
+  let w = await workspace(); check(w.purchases.length === 3 && w.purchases.map(p => p.quantity).join(',') === '2,2,1' && w.purchases.map(p => p.extra).join(',') === '0,0,0', 'Batch preserves expiries with zero delivery costs');
   await go('Склад'); await page.locator('.lot-group').filter({hasText:'25-04-2027'}).locator('summary').click();
   await page.locator('.lot-group').filter({hasText:'25-04-2027'}).getByRole('button',{name:'Продать'}).click();
   check(!(await modal.locator('.lot-picker').innerText()).includes('Выбрано '), 'Sale lot list has no trailing summary row');
@@ -42,7 +42,7 @@ async (page) => {
   await save(); await modal.waitFor({state:'hidden'}); w = await workspace();
   check(w.sales.length === 1 && w.sales[0].unitPrice === 0 && w.sales[0].allocations.length === 2, 'Free multi-lot gift is saved with exact lots');
   await go('Обзор'); check((await page.locator('body').innerText()).includes('Бесплатно'), 'Free gift is visible on overview');
-  check((await page.locator('.v3-profit strong').innerText()).includes('300,03') && (await page.locator('.v3-stockValue strong').innerText()).includes('200,02'), 'Gift profit and remaining value include allocated delivery cents');
+  check((await page.locator('.v3-profit strong').innerText()).includes('300') && (await page.locator('.v3-stockValue strong').innerText()).includes('200'), 'Gift profit and remaining value reflect purchase costs');
   await page.screenshot({path:'output/playwright/v3-overview-mobile.png',fullPage:true});
   for (const width of [320, 390, 768, 1440]) { await page.setViewportSize({width,height:844}); check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `Overview fits ${width}px`); }
   await page.setViewportSize({width:390,height:844});
@@ -83,12 +83,12 @@ async (page) => {
   check((await workspace()).purchases.length === 4, 'Backup import restores all purchases');
   // Import a known v2 fixture through the UI to exercise reconciliation; never touch any cloud account.
   await page.locator('input[type=file]').setInputFiles({name:'formatted-backup.json',mimeType:'application/json',buffer:Buffer.from(' '.repeat(1_100_000)+JSON.stringify({schemaVersion:3,workspace:await workspace()}))});await modal.getByRole('button',{name:'Восстановить учёт'}).click();await modal.waitFor({state:'hidden'});check((await workspace()).purchases.length>0,'Formatted backup larger than 1MB restores validated content');
-  const legacy = {schemaVersion:2,workspace:{models:[{id:'m',name:'Старый сенсор',color:'#526df4'}],purchases:[{id:'p',modelId:'m',date:'2020-01-01',quantity:3,unitPrice:10,extra:0,sold:0,expiry:'2099-12'}],sales:[{id:'s',modelId:'m',date:'2020-01-02',quantity:1,unitPrice:20,costBasis:0}]}};
+  const legacy = {schemaVersion:2,workspace:{models:[{id:'m',name:'Старый сенсор',color:'#526df4'}],purchases:[{id:'p',modelId:'m',date:'2020-01-01',quantity:3,unitPrice:10,extra:0.05,sold:0,expiry:'2099-12'}],sales:[{id:'s',modelId:'m',date:'2020-01-02',quantity:1,unitPrice:20,costBasis:0}]}};
   await page.locator('input[type=file]').setInputFiles({name:'legacy.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(legacy))}); await modal.getByRole('button',{name:'Восстановить учёт'}).click(); await modal.waitFor({state:'hidden'});
   await go('Операции'); await page.getByRole('button',{name:'Изменить закупку Старый сенсор'}).click();
   check(await modal.getByPlaceholder('ДД-ММ-ГГГГ').inputValue() === '31-12-2099', 'Legacy month shows its actual last-day deadline');
   await save(); await modal.waitFor({state:'hidden'});
-  check((await workspace()).purchases[0].expiry === '2099-12', 'Unchanged legacy expiry retains its original stored value');
+  check((await workspace()).purchases[0].expiry === '2099-12' && (await workspace()).purchases[0].extra === 0.05, 'Editing legacy purchase preserves original expiry and delivery costs');
   await go('Настройки');
   if (!(await page.locator('.settings-advanced').evaluate(el => el.open))) await page.locator('.settings-advanced summary').click(); await page.getByLabel('Себестоимость').selectOption('lot');
   check((await page.locator('.reconciliation-list').innerText()).includes('Старый сенсор'), 'Legacy sales require explicit reconciliation');

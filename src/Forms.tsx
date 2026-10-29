@@ -16,7 +16,7 @@ import {
   Trash2,
   X
 } from 'lucide-react'
-import { availableLots, splitDelivery } from './domain'
+import { availableLots } from './domain'
 import {
   expiredOn,
   expiryLabel,
@@ -200,9 +200,7 @@ export function EntryForm({
           )
         : ''
   )
-  const [extra, setExtra] = useState(
-    entry && 'extra' in entry ? String(entry.extra) : '0'
-  )
+  const extra = entry && 'extra' in entry ? entry.extra : 0
   const [rows, setRows] = useState([{ quantity: '1', expiry: '' }])
   const [expiryDate, setExpiryDate] = useState(
     entry && 'expiry' in entry ? (entry.expiry ?? '') : ''
@@ -267,16 +265,7 @@ export function EntryForm({
     purchase && !entry && rows.length > 1
       ? rows.reduce((sum, row) => sum + (Number(row.quantity) || 0), 0)
       : Number(quantity)
-  const total = totalQuantity * Number(price) + (purchase ? Number(extra) : 0)
-  let deliveryParts = rows.map(() => 0)
-  try {
-    deliveryParts = splitDelivery(
-      Number(extra),
-      rows.map((row) => Number(row.quantity))
-    )
-  } catch {
-    /* Invalid drafts are checked before submission. */
-  }
+  const total = totalQuantity * Number(price) + (purchase ? extra : 0)
   const title =
     `${entry ? 'Изменить' : 'Новая'} ${purchase ? 'закупку' : writeoff ? 'списание' : 'продажу'}`
       .replace('Новая закупку', 'Новая закупка')
@@ -397,21 +386,7 @@ export function EntryForm({
       </div>
       {purchase ? (
         <>
-          <label className="form-label">
-            Доставка и расходы, ₽
-            <input
-              name="extra"
-              type="number"
-              min="0"
-              max="100000000"
-              step="0.01"
-              value={extra}
-              onChange={(e) => setExtra(e.target.value)}
-            />
-            <span className="field-help">
-              Распределяются между партиями пропорционально количеству.
-            </span>
-          </label>
+          <input type="hidden" name="extra" value={extra} />
           {entry ? (
             <label className="form-label">
               Годен до <span className="optional-label">необязательно</span>
@@ -443,11 +418,6 @@ export function EntryForm({
                       required
                     />
                   </label>
-                  {rows.length > 1 && (
-                    <span className="field-help">
-                      Доставка: {(deliveryParts[index] / 100).toFixed(2)} ₽
-                    </span>
-                  )}
                   <label>
                     Годен до
                     <ExpiryInput
