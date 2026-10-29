@@ -1,69 +1,379 @@
-import { lazy, Suspense, useMemo, useState, type CSSProperties } from 'react'
-import { ArrowDownLeft, ArrowRight, ArrowUpRight, Boxes, ChevronRight, PackageOpen, TrendingUp } from 'lucide-react'
+import { lazy, Suspense, useMemo, useState } from 'react'
+import {
+  ArrowDownLeft,
+  ArrowRight,
+  ArrowUpRight,
+  AlertTriangle
+} from 'lucide-react'
 import type { derive } from './accounting'
-import { isActive, modelAccent, money, shortDate, today, type Workspace } from './types'
+import {
+  expiredOn,
+  expiryLabel,
+  expirySoon,
+  isActive,
+  money,
+  settingsFor,
+  shortDate,
+  today,
+  type Workspace
+} from './types'
 import { Amount } from './ui'
-import { financeFlow, type FlowMonths } from './financeFlow'
+import { salesFlow, type FlowMonths } from './financeFlow'
 
 const FinanceChart = lazy(() => import('./FinanceChart'))
 type Stats = ReturnType<typeof derive>
 
-export function Overview({ workspace, stats, onPage }: {
+export function Overview({
+  workspace,
+  stats,
+  onPage,
+  onHistoryRange
+}: {
   workspace: Workspace
   stats: Stats
   onPage: (page: 'overview' | 'inventory' | 'history' | 'settings') => void
+  onHistoryRange?: (range: { start: string; end: string }) => void
 }) {
-  const [chartMonths, setChartMonths] = useState<FlowMonths>(1)
-  const stock = workspace.models.map((model) => ({
-    ...model, color: modelAccent(model.color),
-    quantity: stats.lots.filter((lot) => lot.purchase.modelId === model.id).reduce((sum, lot) => sum + lot.remaining, 0),
-    average: stats.averageCosts.get(model.id) ?? 0,
-  }))
+  const settings = settingsFor(workspace)
+  const [chartMonths, setChartMonths] = useState<FlowMonths>(
+    settings.chartMonths
+  )
+  const [unit, setUnit] = useState<'rub' | 'quantity'>(settings.chartUnit)
+  const [selected, setSelected] = useState<number | null>(null)
   const currentDate = today()
-  const flow = useMemo(() => financeFlow(workspace, chartMonths, currentDate), [workspace, chartMonths, currentDate])
-  const chartSales = flow.sales
-  const chartExpenses = flow.expenses
-  const activeLots = stats.lots.filter((lot) => lot.remaining > 0).length
-
-  return <div className={`overview-content ${[stats.revenue, stats.profit, stats.stockValue, chartSales, chartExpenses].some((amount) => money(amount).length > 12) ? 'overview-long-values' : ''}`} >
-    <section className="finance-stage" aria-label="Финансовые показатели за всё время">
-      <div className="finance-stage-head"><span>Финансовая картина</span><span className="period-label">За всё время</span></div>
-      <div className="finance-revenue"><span className="finance-label"><TrendingUp size={19} />Прибыль от продаж</span><strong style={{ '--amount-length': money(stats.profit).length + 2, color: '#533a85' } as CSSProperties}><Amount value={stats.profit} /></strong><span className="finance-detail">Оборот минус закупочная стоимость и доставка проданных товаров.</span></div>
-      <div className="finance-profit"><span className="finance-label">Оборот продаж</span><strong className="revenue-value" style={{ '--amount-length': money(stats.revenue).length + 2, color: '#2f409a' } as CSSProperties}><Amount value={stats.revenue} /></strong><span className="finance-detail">Сумма всех продаж до вычета себестоимости.</span><span className="finance-sales-count">Продано {workspace.sales.filter(isActive).reduce((sum, sale) => sum + sale.quantity, 0)} шт.</span></div>
-      <button className="finance-capital" onClick={() => onPage('inventory')}><span className="finance-label"><Boxes size={19} />Стоимость остатков<ChevronRight size={17} /></span><strong style={{ '--amount-length': money(stats.stockValue).length + 2 } as CSSProperties}><Amount value={stats.stockValue} /></strong><span className="finance-detail">Закупочная стоимость и доставка товара, который ещё на складе.</span></button>
-    </section>
-
-    <div className="overview-grid">
-      <section className="panel chart-panel" aria-labelledby="flow-title">
-        <div className="panel-head"><div><h2 id="flow-title">Продажи и закупки</h2><p className="flow-range">{flow.range}</p></div><div className="segmented-control" role="group" aria-label="Период графика">{([[1, '1 месяц'], [3, '3 месяца'], [6, '6 месяцев']] as const).map(([months, label]) => <button key={months} aria-pressed={chartMonths === months} onClick={() => setChartMonths(months)}>{label}</button>)}</div></div>
-        <div className="chart-totals"><div><span><i className="legend-dot legend-sales" />Продажи</span><strong><Amount value={chartSales} /></strong></div><div><span><i className="legend-dot legend-expenses" />Закупки и доставка</span><strong><Amount value={chartExpenses} /></strong></div></div>
-        <p className="flow-caption">{chartMonths === 1 ? 'Текущий месяц по неделям' : 'Сравнение по месяцам'}. Суммы в рублях.</p>
-        {chartSales || chartExpenses ? <Suspense fallback={<div className="chart-placeholder" aria-label="Загрузка графика" />}><FinanceChart data={flow.periods} /></Suspense> : <div className="chart-empty"><ArrowLeftRightGraphic /><strong>За этот период операций нет</strong><span>Выберите другой период или добавьте операцию.</span></div>}
-        <div className="chart-foot"><span>Продажи минус закупки</span><strong className={chartSales - chartExpenses >= 0 ? 'positive-text' : 'negative-text'}><Amount value={chartSales - chartExpenses} signed /></strong></div>
-        <p className="flow-explanation">Здесь закупки учтены целиком, включая товар на складе. Прибыль только от проданных товаров показана выше.</p>
-        {(chartSales > 0 || chartExpenses > 0) && <details className="flow-data"><summary>Точные суммы {chartMonths === 1 ? 'по неделям' : 'по месяцам'}</summary><table className="flow-table"><caption>{flow.range}</caption><thead><tr><th scope="col">Период</th><th scope="col">Продажи</th><th scope="col">Закупки и доставка</th></tr></thead><tbody>{flow.periods.map((period) => <tr key={period.key}><th scope="row">{period.range}</th><td data-label="Продажи"><span><Amount value={period.sales} /></span></td><td data-label="Закупки и доставка"><span><Amount value={period.expenses} /></span></td></tr>)}</tbody></table></details>}
+  const flow = useMemo(
+    () => salesFlow(workspace, chartMonths, currentDate),
+    [workspace, chartMonths, currentDate]
+  )
+  const selectedIndex =
+    selected === null
+      ? Math.max(
+          0,
+          flow.periods.map((period) => period.count > 0).lastIndexOf(true)
+        )
+      : Math.min(selected, flow.periods.length - 1)
+  const point = flow.periods[selectedIndex]
+  const salesQuantity = workspace.sales
+    .filter(isActive)
+    .reduce((sum, sale) => sum + sale.quantity, 0)
+  const purchasedQuantity = workspace.purchases
+    .filter(isActive)
+    .reduce((sum, purchase) => sum + purchase.quantity, 0)
+  const freeQuantity = workspace.sales
+    .filter((sale) => isActive(sale) && sale.unitPrice === 0)
+    .reduce((sum, sale) => sum + sale.quantity, 0)
+  const lowStock =
+    settings.lowStockThreshold > 0
+      ? workspace.models
+          .map((model) => ({
+            model,
+            quantity: stats.lots
+              .filter(
+                (lot) =>
+                  lot.purchase.modelId === model.id &&
+                  !expiredOn(lot.purchase.expiry, currentDate)
+              )
+              .reduce((sum, lot) => sum + lot.remaining, 0)
+          }))
+          .filter((item) => item.quantity <= settings.lowStockThreshold)
+      : []
+  const warnings = stats.lots
+    .filter(
+      (lot) =>
+        lot.remaining > 0 &&
+        (expiredOn(lot.purchase.expiry, currentDate) ||
+          expirySoon(
+            lot.purchase.expiry,
+            settings.expiryWarningDays,
+            currentDate
+          ))
+    )
+    .sort((a, b) =>
+      (a.purchase.expiry ?? '').localeCompare(b.purchase.expiry ?? '')
+    )
+  const metrics = [
+    { id: 'profit', label: 'Прибыль', amount: stats.profit, detail: '' },
+    {
+      id: 'revenue',
+      label: 'Продано',
+      amount: stats.revenue,
+      detail: `${salesQuantity} шт.${freeQuantity ? ` · бесплатно ${freeQuantity} шт.` : ''}`
+    },
+    {
+      id: 'investments',
+      label: 'Закуплено',
+      amount: stats.investments,
+      detail: `${purchasedQuantity} шт. · с доставкой`
+    },
+    {
+      id: 'stockValue',
+      label: 'На складе',
+      amount: stats.stockValue,
+      detail: `${stats.quantity} шт.`
+    }
+  ]
+  const orderedMetrics = [...metrics].sort(
+    (a, b) =>
+      Number(b.id === settings.primaryMetric) -
+      Number(a.id === settings.primaryMetric)
+  )
+  return (
+    <div className="overview-content v3-overview">
+      <section
+        className="v3-finance"
+        aria-label="Финансовые показатели за всё время"
+      >
+        <div className="v3-section-top">
+          <h2>Финансы</h2>
+          <span>За всё время</span>
+        </div>
+        <div className="v3-metrics">
+          {orderedMetrics.map((metric) => (
+            <div
+              key={metric.id}
+              className={`v3-metric v3-${metric.id} ${money(metric.amount).length >= 8 ? 'v3-long' : ''}`}
+            >
+              {metric.id === 'stockValue' ? (
+                <button
+                  className="v3-stock-button"
+                  onClick={() => onPage('inventory')}
+                >
+                  <span>
+                    {metric.label} <ArrowRight size={18} />
+                  </span>
+                  <strong>
+                    <Amount value={metric.amount} />
+                  </strong>
+                  <small>{metric.detail}</small>
+                </button>
+              ) : (
+                <>
+                  <span>{metric.label}</span>
+                  <strong>
+                    <Amount value={metric.amount} />
+                  </strong>
+                  {metric.detail && <small>{metric.detail}</small>}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
       </section>
-
-      <section className="stock-panel" aria-labelledby="stock-title">
-        <div className="panel-head"><h2 id="stock-title">На складе</h2><span className="stock-illustration"><Boxes size={28} strokeWidth={1.5} /></span></div>
-        <div className="stock-total"><strong>{stats.quantity}</strong><span>единиц товара<br />в наличии</span><span className="stock-batch-count">{activeLots} партий</span></div>
-        <div className="stock-distribution" aria-label="Количество шт. по моделям">{stock.filter((model) => model.quantity > 0).map((model) => <span key={model.id} style={{ flex: model.quantity, background: model.color }} title={`${model.name}: ${model.quantity} шт.`} />)}</div>
-        <div className="stock-list">{stock.map((model) => <div className="stock-row" key={model.id} style={{ '--model-color': model.color } as CSSProperties}><span className="model-token">{model.name.slice(0, 2).toUpperCase()}</span><div className="stock-name"><strong>{model.name}</strong><span>{model.quantity ? `${money(model.average)} ₽ / шт.` : 'Нет в наличии'}</span></div><strong className={`stock-quantity ${model.quantity <= 3 ? 'stock-low' : ''}`}>{model.quantity}<small> шт.</small></strong></div>)}</div>
-        <button className="stock-link" onClick={() => onPage('inventory')}>Управлять складом<ArrowRight size={19} /></button>
+      <section className="v3-panel v3-chart-panel" aria-labelledby="flow-title">
+        <div className="v3-chart-heading">
+          <div>
+            <h2 id="flow-title">Продажи</h2>
+            <p>{flow.range}</p>
+          </div>
+          <div className="v3-segment" role="group" aria-label="Период графика">
+            {(
+              [
+                [1, '1 мес.'],
+                [3, '3 мес.'],
+                [6, '6 мес.']
+              ] as const
+            ).map(([months, label]) => (
+              <button
+                key={months}
+                aria-pressed={chartMonths === months}
+                onClick={() => {
+                  setChartMonths(months)
+                  setSelected(null)
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="v3-chart-summary">
+          <div>
+            <span>За период</span>
+            <strong>
+              <Amount value={flow.sales} />
+            </strong>
+            <span>{flow.quantity} шт.</span>
+          </div>
+          <div className="v3-segment" role="group" aria-label="Единицы графика">
+            <button
+              aria-pressed={unit === 'rub'}
+              onClick={() => setUnit('rub')}
+            >
+              ₽
+            </button>
+            <button
+              aria-pressed={unit === 'quantity'}
+              onClick={() => setUnit('quantity')}
+            >
+              шт.
+            </button>
+          </div>
+        </div>
+        {flow.count ? (
+          <>
+            <Suspense
+              fallback={
+                <div className="v3-chart-wrap" aria-label="Загрузка графика" />
+              }
+            >
+              <FinanceChart
+                data={flow.periods}
+                unit={unit}
+                selected={selectedIndex}
+                onSelect={setSelected}
+              />
+            </Suspense>
+            <div className="v3-point" aria-live="polite">
+              <span>{point.range}</span>
+              <strong>
+                {money(point.sales)} ₽ · {point.quantity} шт.
+              </strong>
+              <span>
+                {point.count ? `Операций: ${point.count}` : 'Нет продаж'}
+              </span>
+            </div>
+            <label className="v3-slider">
+              Выберите {chartMonths === 1 ? 'день' : 'неделю'}{' '}
+              <input
+                type="range"
+                min="0"
+                max={flow.periods.length - 1}
+                value={selectedIndex}
+                onChange={(event) => setSelected(Number(event.target.value))}
+                aria-valuetext={`${point.range}: ${money(point.sales)} рублей, ${point.quantity} штук, операций ${point.count}`}
+              />
+            </label>
+          </>
+        ) : (
+          <div className="v3-empty">За этот период продаж нет</div>
+        )}
+        <div className="v3-chart-foot">
+          <span>
+            {chartMonths === 1 ? 'По дням' : 'По неделям'} · включая бесплатные
+            передачи
+          </span>
+          <button
+            className="v3-link"
+            onClick={() =>
+              onHistoryRange
+                ? onHistoryRange({ start: flow.start, end: flow.end })
+                : onPage('history')
+            }
+          >
+            Операции за период <ArrowRight size={18} />
+          </button>
+        </div>
+      </section>
+      {warnings.length > 0 && (
+        <section className="v3-panel v3-warning" aria-labelledby="expiry-title">
+          <div className="v3-section-top">
+            <h2 id="expiry-title">
+              <AlertTriangle size={20} /> Сроки партий
+            </h2>
+            <button className="v3-link" onClick={() => onPage('inventory')}>
+              На склад <ArrowRight size={18} />
+            </button>
+          </div>
+          <div className="v3-warning-list">
+            {warnings.slice(0, 3).map((lot) => (
+              <div key={lot.purchase.id}>
+                <strong>
+                  {workspace.models.find(
+                    (model) => model.id === lot.purchase.modelId
+                  )?.name ?? 'Товар'}
+                </strong>
+                <span>
+                  {expiredOn(lot.purchase.expiry, currentDate)
+                    ? 'Истёк'
+                    : 'Годен до'}{' '}
+                  {expiryLabel(lot.purchase.expiry)} · {lot.remaining} шт.
+                </span>
+              </div>
+            ))}
+          </div>
+          {warnings.length > 3 && (
+            <span>Ещё партий: {warnings.length - 3}</span>
+          )}
+        </section>
+      )}
+      {lowStock.length > 0 && (
+        <section
+          className="v3-panel v3-warning"
+          aria-labelledby="low-stock-title"
+        >
+          <div className="v3-section-top">
+            <h2 id="low-stock-title">Мало на складе</h2>
+            <button className="v3-link" onClick={() => onPage('inventory')}>
+              Проверить <ArrowRight size={18} />
+            </button>
+          </div>
+          <div className="v3-warning-list">
+            {lowStock.slice(0, 3).map(({ model, quantity }) => (
+              <div key={model.id}>
+                <strong>{model.name}</strong>
+                <span>
+                  {quantity
+                    ? `${quantity} шт. доступно`
+                    : 'Нет доступных партий'}
+                </span>
+              </div>
+            ))}
+          </div>
+          {lowStock.length > 3 && (
+            <span>Ещё моделей: {lowStock.length - 3}</span>
+          )}
+        </section>
+      )}
+      <section
+        className="v3-panel v3-activity"
+        aria-labelledby="activity-title"
+      >
+        <div className="v3-section-top">
+          <h2 id="activity-title">Последние операции</h2>
+          <button className="v3-link" onClick={() => onPage('history')}>
+            Вся история <ArrowRight size={18} />
+          </button>
+        </div>
+        <div>
+          {stats.movements.slice(0, 4).map((movement) => (
+            <div
+              className="v3-activity-row"
+              key={`${movement.type}-${movement.id}`}
+            >
+              <span className="v3-activity-icon">
+                {movement.type === 'purchase' ? (
+                  <ArrowDownLeft size={20} />
+                ) : (
+                  <ArrowUpRight size={20} />
+                )}
+              </span>
+              <div>
+                <strong>{movement.name}</strong>
+                <span>
+                  {movement.type === 'sale'
+                    ? 'Продажа'
+                    : movement.type === 'writeoff'
+                      ? 'Списание'
+                      : 'Закупка'}{' '}
+                  · {movement.quantity} шт. · {shortDate(movement.date)}
+                  {!isActive(movement) && ' · Отменена'}
+                  {movement.type === 'sale' &&
+                    movement.amount === 0 &&
+                    ' · Бесплатно'}
+                </span>
+              </div>
+              <strong className={!isActive(movement) ? 'v3-cancelled' : ''}>
+                <Amount value={movement.amount} signed />
+              </strong>
+            </div>
+          ))}
+        </div>
+        {!stats.movements.length && (
+          <div className="v3-empty">
+            Добавьте первую закупку, чтобы начать учёт.
+          </div>
+        )}
       </section>
     </div>
-
-    <section className="lots-section" aria-labelledby="lots-title"><div className="section-head"><div><h2 id="lots-title">Вложения возвращаются</h2><p>Последние закупки и их окупаемость</p></div><button className="text-link" onClick={() => onPage('inventory')}>Все партии <ArrowUpRight size={19} /></button></div>
-      <div className="lot-cards">{stats.lots.slice(0, 3).map((lot) => {
-        const model = workspace.models.find((item) => item.id === lot.purchase.modelId)
-        const invested = lot.purchase.quantity * lot.purchase.unitPrice + lot.purchase.extra
-        const returned = invested ? lot.revenue / invested * 100 : 0
-        return <button className="lot-card" key={lot.purchase.id} onClick={() => onPage('inventory')} style={{ '--model-color': modelAccent(model?.color ?? '#526df4') } as CSSProperties}><div className="lot-card-head"><span className="model-marker" /><strong>{model?.name ?? 'Товар'}</strong><ArrowUpRight size={18} /></div><span className="lot-date">Закупка {shortDate(lot.purchase.date)}</span><div className="lot-payback"><strong>{Math.round(returned)}<span>%</span></strong><span>{returned >= 100 ? 'вложения вернулись' : 'вложений вернулось'}</span></div><div className="progress-track"><span style={{ width: `${Math.min(returned, 100)}%` }} /></div><div className="lot-card-bottom"><span>Вернулось <b>{money(lot.revenue)} ₽</b></span><span>Вложено <b>{money(invested)} ₽</b></span></div></button>
-      })}</div>{!stats.lots.length && <div className="empty-state"><PackageOpen size={35} /><strong>Добавьте первую закупку</strong><span>Здесь будут остатки и возврат вложений по партиям.</span></div>}
-    </section>
-
-    <section className="panel activity-panel" aria-labelledby="activity-title"><div className="panel-head"><h2 id="activity-title">Последние операции</h2><button className="text-link" onClick={() => onPage('history')}>Вся история <ArrowUpRight size={19} /></button></div><div className="activity-list">{stats.movements.slice(0, 4).map((movement) => <div className="activity-row" key={movement.id}><span className={`activity-icon ${movement.type === 'sale' ? 'activity-sale' : 'activity-buy'}`}>{movement.type === 'sale' ? <ArrowUpRight size={22} /> : <ArrowDownLeft size={22} />}</span><div className="activity-copy"><strong>{movement.name}</strong><span>{movement.type === 'sale' ? 'Продажа' : 'Закупка'} · {movement.quantity} шт. · {shortDate(movement.date)}{!isActive(movement) && ' · Отменена'}</span></div><strong className={`activity-amount ${!isActive(movement) ? 'cancelled-amount' : ''} ${movement.type === 'sale' ? 'positive-text' : 'negative-text'}`}><Amount value={movement.amount} signed /></strong></div>)}</div>{!stats.movements.length && <div className="empty-state"><ArrowLeftRightGraphic /><strong>Первая запись ещё впереди</strong><span>Добавьте закупку, чтобы начать учёт.</span></div>}</section>
-  </div>
+  )
 }
-
-function ArrowLeftRightGraphic() { return <svg width="32" height="32" viewBox="0 0 28 28" fill="none" aria-hidden="true"><path d="M5 9h18m-5-5 5 5-5 5M23 19H5m5-5-5 5 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg> }

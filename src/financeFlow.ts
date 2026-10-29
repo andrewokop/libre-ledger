@@ -1,43 +1,81 @@
 import { isActive, type Workspace } from './types'
 
 export type FlowMonths = 1 | 3 | 6
-export type FlowPeriod = { key: string; label: string; range: string; start: string; end: string; sales: number; expenses: number }
-const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+export type FlowPeriod = {
+  key: string
+  label: string
+  range: string
+  start: string
+  end: string
+  sales: number
+  quantity: number
+  count: number
+}
+const dateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 const asDate = (value: string) => new Date(`${value}T12:00:00`)
-const rangeFormatter = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })
-const monthLabels = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
-export const formatFlowRange = (start: string, end: string) => rangeFormatter.formatRange(asDate(start), asDate(end))
+const formatter = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric'
+})
+export const formatFlowRange = (start: string, end: string) =>
+  start === end
+    ? formatter.format(asDate(start))
+    : formatter.formatRange(asDate(start), asDate(end))
 
-// Calendar months through today. The one-month view groups days into readable
-// seven-day intervals; longer views compare complete months and the current one.
-export function financeFlow(workspace: Workspace, months: FlowMonths, end: string) {
+// Calendar months through today; longer views use contiguous seven-day intervals.
+export function salesFlow(
+  workspace: Workspace,
+  months: FlowMonths,
+  end: string
+) {
   const endDate = asDate(end)
-  const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - months + 1, 1, 12)
-  const start = dateKey(startDate)
+  const first = new Date(
+    endDate.getFullYear(),
+    endDate.getMonth() - months + 1,
+    1,
+    12
+  )
+  const start = dateKey(first)
   const periods: FlowPeriod[] = []
-  const add = (first: Date, last: Date, label: string) => {
-    const from = dateKey(first), to = dateKey(last)
-    periods.push({ key: from, label, range: formatFlowRange(from, to), start: from, end: to, sales: 0, expenses: 0 })
-  }
-  if (months === 1) {
-    for (let day = 1; day <= endDate.getDate(); day += 7) {
-      const lastDay = Math.min(day + 6, endDate.getDate())
-      add(new Date(endDate.getFullYear(), endDate.getMonth(), day, 12), new Date(endDate.getFullYear(), endDate.getMonth(), lastDay, 12), day === lastDay ? String(day) : `${day}–${lastDay}`)
-    }
-  } else {
-    for (let index = 0; index < months; index++) {
-      const first = new Date(startDate.getFullYear(), startDate.getMonth() + index, 1, 12)
-      const last = index === months - 1 ? endDate : new Date(first.getFullYear(), first.getMonth() + 1, 0, 12)
-      add(first, last, monthLabels[first.getMonth()])
-    }
+  for (let cursor = new Date(first); cursor <= endDate;) {
+    const last = new Date(cursor)
+    last.setDate(last.getDate() + (months === 1 ? 0 : 6))
+    if (last > endDate) last.setTime(endDate.getTime())
+    const from = dateKey(cursor),
+      to = dateKey(last)
+    periods.push({
+      key: from,
+      start: from,
+      end: to,
+      label: `${cursor.getDate()}.${String(cursor.getMonth() + 1).padStart(2, '0')}`,
+      range: formatFlowRange(from, to),
+      sales: 0,
+      quantity: 0,
+      count: 0
+    })
+    cursor = new Date(last)
+    cursor.setDate(cursor.getDate() + 1)
   }
   for (const sale of workspace.sales.filter(isActive)) {
-    const period = periods.find((item) => sale.date >= item.start && sale.date <= item.end)
-    if (period) period.sales += sale.quantity * sale.unitPrice
+    const period = periods.find(
+      (item) => sale.date >= item.start && sale.date <= item.end
+    )
+    if (period) {
+      period.sales += sale.quantity * sale.unitPrice
+      period.quantity += sale.quantity
+      period.count++
+    }
   }
-  for (const purchase of workspace.purchases.filter(isActive)) {
-    const period = periods.find((item) => purchase.date >= item.start && purchase.date <= item.end)
-    if (period) period.expenses += purchase.quantity * purchase.unitPrice + purchase.extra
+  return {
+    periods,
+    start,
+    end,
+    range: formatFlowRange(start, end),
+    sales: periods.reduce((sum, item) => sum + item.sales, 0),
+    quantity: periods.reduce((sum, item) => sum + item.quantity, 0),
+    count: periods.reduce((sum, item) => sum + item.count, 0)
   }
-  return { periods, start, end, range: formatFlowRange(start, end), sales: periods.reduce((sum, item) => sum + item.sales, 0), expenses: periods.reduce((sum, item) => sum + item.expenses, 0) }
 }
+export const financeFlow = salesFlow

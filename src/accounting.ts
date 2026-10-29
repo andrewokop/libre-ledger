@@ -1,105 +1,385 @@
-import { isActive, type Movement, type Purchase, type Workspace } from './types'
+import {
+  isActive,
+  settingsFor,
+  type Allocation,
+  type EntryRef,
+  type Movement,
+  type Purchase,
+  type Workspace
+} from './types'
 
-export type LotStats = { purchase: Purchase; remaining: number; sold: number; revenue: number; cogs: number }
-
+export type LotStats = {
+  purchase: Purchase
+  remaining: number
+  sold: number
+  writtenOff: number
+  revenue: number
+  cogs: number
+  stockValue: number
+  estimated: boolean
+}
+const cents = (value: number) => Math.round(value * 100)
+const share = (total: number, units: number, quantity: number) =>
+  Number(
+    (BigInt(total) * BigInt(units) * 2n + BigInt(quantity)) /
+      (BigInt(quantity) * 2n)
+  )
 export function derive(workspace: Workspace) {
-  const lots: LotStats[] = workspace.purchases.filter(isActive).map((purchase) => ({ purchase, remaining: 0, sold: 0, revenue: 0, cogs: 0 }))
-  let revenue = 0
-  let cogs = 0
-  const modelBalances = new Map<string, { quantity: number; value: number }>()
+  const method = settingsFor(workspace).costingMethod
+  const lots: LotStats[] = workspace.purchases
+    .filter(isActive)
+    .map((purchase) => ({
+      purchase,
+      remaining: 0,
+      sold: 0,
+      writtenOff: 0,
+      revenue: 0,
+      cogs: 0,
+      stockValue: 0,
+      estimated: false
+    }))
+  const byId = new Map(lots.map((lot) => [lot.purchase.id, lot]))
+  const balances = new Map<string, { quantity: number; value: number }>()
+  const unassignedModels = [
+    ...new Set(
+      workspace.sales
+        .filter(isActive)
+        .filter((sale) => !sale.allocations)
+        .map((sale) => sale.modelId)
+    )
+  ]
+  const allocationsByEntry = new Map<string, Allocation[]>()
+  const movementCosts = new Map<string, number>()
+  let revenue = 0,
+    cogs = 0,
+    writeOffCost = 0
+  let revenueCents = 0,
+    cogsCents = 0,
+    writeOffCents = 0
+  const lotRevenueCents = new Map<string, number>()
   const events = [
-    ...workspace.purchases.filter(isActive).map((purchase) => ({ type: 'purchase' as const, date: purchase.date, id: purchase.id, purchase })),
-    ...workspace.sales.filter(isActive).map((sale) => ({ type: 'sale' as const, date: sale.date, id: sale.id, sale })),
-  ].sort((a, b) => a.date.localeCompare(b.date) || (a.type === b.type ? a.id.localeCompare(b.id) : a.type === 'purchase' ? -1 : 1))
-
-  for (const event of events) {
-    if (event.type === 'purchase') {
-      const batch = event.purchase
-      const purchaseLot = lots.find((item) => item.purchase.id === batch.id)
-      if (purchaseLot) purchaseLot.remaining += batch.quantity
-      const balance = modelBalances.get(batch.modelId) ?? { quantity: 0, value: 0 }
-      balance.quantity += batch.quantity
-      balance.value += batch.quantity * batch.unitPrice + batch.extra
-      modelBalances.set(batch.modelId, balance)
+    ...workspace.purchases
+      .filter(isActive)
+      .map((entry) => ({ type: 'purchase' as const, entry })),
+    ...workspace.sales
+      .filter(isActive)
+      .map((entry) => ({ type: 'sale' as const, entry })),
+    ...(workspace.writeOffs ?? [])
+      .filter(isActive)
+      .map((entry) => ({ type: 'writeoff' as const, entry }))
+  ].sort(
+    (a, b) =>
+      a.entry.date.localeCompare(b.entry.date) ||
+      (a.type === 'purchase' && b.type !== 'purchase'
+        ? -1
+        : b.type === 'purchase' && a.type !== 'purchase'
+          ? 1
+          : a.entry.id.localeCompare(b.entry.id))
+  )
+  const futureReserved = new Map<string, number>()
+  for (const { type, entry } of events)
+    if (type !== 'purchase' && 'allocations' in entry && entry.allocations)
+      for (const allocation of entry.allocations)
+        futureReserved.set(
+          allocation.purchaseId,
+          (futureReserved.get(allocation.purchaseId) ?? 0) + allocation.quantity
+        )
+  for (const { type, entry } of events) {
+    const balance = balances.get(entry.modelId) ?? { quantity: 0, value: 0 }
+    if (type === 'purchase') {
+      const purchase = entry as Purchase
+      byId.get(entry.id)!.remaining += entry.quantity
+      balance.quantity += entry.quantity
+      balance.value +=
+        method === 'lot'
+          ? cents(purchase.unitPrice) * purchase.quantity +
+            cents(purchase.extra)
+          : purchase.unitPrice * purchase.quantity + purchase.extra
+      balances.set(entry.modelId, balance)
       continue
     }
-    const sale = event.sale
-    const balance = modelBalances.get(sale.modelId) ?? { quantity: 0, value: 0 }
-    const averageCost = balance.quantity > 0 ? balance.value / balance.quantity : 0
-    const saleCogs = sale.quantity * averageCost
-    const modelLots = lots.filter((lot) => lot.purchase.modelId === sale.modelId && lot.remaining > 0)
-    const totalRemaining = modelLots.reduce((sum, lot) => sum + lot.remaining, 0)
-    let unitsToAllocate = Math.min(sale.quantity, totalRemaining)
-    const quotas = modelLots.map((lot) => ({ lot, units: totalRemaining ? Math.min(lot.remaining, unitsToAllocate * lot.remaining / totalRemaining) : 0 }))
-    const allocations = quotas.map(({ lot, units }) => ({ lot, units: Math.floor(units) }))
-    unitsToAllocate -= allocations.reduce((sum, item) => sum + item.units, 0)
-    const remainderOrder = quotas.map(({ lot, units }, index) => ({ index, fraction: units - Math.floor(units), room: lot.remaining - allocations[index].units })).sort((a, b) => b.fraction - a.fraction)
-    for (const item of remainderOrder) {
-      if (unitsToAllocate <= 0) break
-      if (item.room <= 0) continue
-      allocations[item.index].units += 1
-      unitsToAllocate -= 1
+    if (balance.quantity < entry.quantity)
+      throw new Error(
+        'Изменение создаст отрицательный остаток. Проверьте даты и количество, включая более поздние продажи.'
+      )
+    const average = balance.quantity ? balance.value / balance.quantity : 0
+    let allocations: Allocation[]
+    if ('allocations' in entry && entry.allocations) {
+      allocations = entry.allocations
+      for (const allocation of allocations)
+        futureReserved.set(
+          allocation.purchaseId,
+          (futureReserved.get(allocation.purchaseId) ?? 0) - allocation.quantity
+        )
+    } else {
+      if (method === 'lot')
+        throw new Error(
+          'Уточните партии старых продаж в разделе «Операции» перед переходом на учёт по партиям.'
+        )
+      const available = lots.filter(
+        (lot) =>
+          lot.purchase.modelId === entry.modelId &&
+          lot.remaining > (futureReserved.get(lot.purchase.id) ?? 0)
+      )
+      const total = available.reduce(
+        (sum, lot) =>
+          sum + lot.remaining - (futureReserved.get(lot.purchase.id) ?? 0),
+        0
+      )
+      if (total < entry.quantity)
+        throw Error(
+          'Недостаточно товара для старой продажи с учётом подтверждённых партий следующих операций. Уточните партии в истории.'
+        )
+      const quotas = available.map((lot) => ({
+        lot,
+        exact:
+          (entry.quantity *
+            (lot.remaining - (futureReserved.get(lot.purchase.id) ?? 0))) /
+          total
+      }))
+      allocations = quotas.map(({ lot, exact }) => ({
+        purchaseId: lot.purchase.id,
+        quantity: Math.floor(exact)
+      }))
+      let left =
+        entry.quantity -
+        allocations.reduce((sum, item) => sum + item.quantity, 0)
+      for (const { index } of quotas
+        .map(({ exact }, index) => ({
+          index,
+          fraction: exact - Math.floor(exact)
+        }))
+        .sort((a, b) => b.fraction - a.fraction)) {
+        if (!left) break
+        allocations[index].quantity++
+        left--
+      }
+      allocations = allocations.filter((item) => item.quantity > 0)
     }
-    for (const { lot, units } of allocations) {
-      if (!units) continue
-      lot.remaining -= units
-      lot.sold += units
-      lot.revenue += sale.unitPrice * units
-      lot.cogs += averageCost * units
+    if (
+      allocations.reduce((sum, item) => sum + item.quantity, 0) !==
+        entry.quantity ||
+      new Set(allocations.map((item) => item.purchaseId)).size !==
+        allocations.length
+    )
+      throw new Error(
+        'Количество по партиям должно совпадать с количеством операции.'
+      )
+    let cost = 0
+    for (const allocation of allocations) {
+      const lot = byId.get(allocation.purchaseId)
+      if (
+        !lot ||
+        lot.purchase.modelId !== entry.modelId ||
+        lot.purchase.date > entry.date
+      )
+        throw new Error('Выбранная партия недоступна на дату операции.')
+      if (
+        !Number.isSafeInteger(allocation.quantity) ||
+        allocation.quantity < 1 ||
+        allocation.quantity > lot.remaining
+      )
+        throw new Error(
+          `Недостаточно товара в выбранной партии от ${lot.purchase.date}. Проверьте последующие операции.`
+        )
+      const totalCost =
+        cents(lot.purchase.unitPrice) * lot.purchase.quantity +
+        cents(lot.purchase.extra)
+      const previousUnits = lot.sold + lot.writtenOff
+      const partCost =
+        method === 'lot'
+          ? share(
+              totalCost,
+              previousUnits + allocation.quantity,
+              lot.purchase.quantity
+            ) - share(totalCost, previousUnits, lot.purchase.quantity)
+          : average * allocation.quantity
+      cost += partCost
+      lot.cogs += method === 'lot' ? partCost / 100 : partCost
+      lot.remaining -= allocation.quantity
+      if (type === 'sale') {
+        lot.sold += allocation.quantity
+        lot.revenue +=
+          ('unitPrice' in entry ? entry.unitPrice : 0) * allocation.quantity
+        lotRevenueCents.set(
+          lot.purchase.id,
+          (lotRevenueCents.get(lot.purchase.id) ?? 0) +
+            cents('unitPrice' in entry ? entry.unitPrice : 0) *
+              allocation.quantity
+        )
+      } else lot.writtenOff += allocation.quantity
     }
-    balance.quantity = Math.max(0, balance.quantity - sale.quantity)
-    balance.value = Math.max(0, balance.value - saleCogs)
-    modelBalances.set(sale.modelId, balance)
-    revenue += sale.quantity * sale.unitPrice
-    cogs += saleCogs
+    allocationsByEntry.set(
+      `${type}:${entry.id}`,
+      allocations.map((item) => ({ ...item }))
+    )
+    const recordedCost =
+      method === 'lot' ? cost / 100 : average * entry.quantity
+    movementCosts.set(`${type}:${entry.id}`, recordedCost)
+    cogs += recordedCost
+    if (type === 'writeoff') writeOffCost += recordedCost
+    if (method === 'lot') {
+      cogsCents += cost
+      if (type === 'writeoff') writeOffCents += cost
+    }
+    balance.quantity -= entry.quantity
+    balance.value = Math.max(
+      0,
+      balance.value - (method === 'lot' ? cost : average * entry.quantity)
+    )
+    balances.set(entry.modelId, balance)
+    if (type === 'sale' && 'unitPrice' in entry) {
+      revenue += entry.quantity * entry.unitPrice
+      revenueCents += cents(entry.unitPrice) * entry.quantity
+    }
   }
-
-  const stockValue = [...modelBalances.values()].reduce((sum, balance) => sum + balance.value, 0)
-  const quantity = [...modelBalances.values()].reduce((sum, balance) => sum + balance.quantity, 0)
-  const investments = workspace.purchases.filter(isActive).reduce((sum, purchase) => sum + purchase.quantity * purchase.unitPrice + purchase.extra, 0)
-  const profit = revenue - cogs
-  const movementByMonth = new Map<string, { month: string; sales: number; expenses: number }>()
-  for (const sale of workspace.sales.filter(isActive)) {
-    const key = sale.date.slice(0, 7)
-    const item = movementByMonth.get(key) ?? { month: '', sales: 0, expenses: 0 }
-    item.month = new Intl.DateTimeFormat('ru-RU', { month: 'short' }).format(new Date(`${key}-15T12:00:00`)).replace('.', '')
-    item.sales += sale.quantity * sale.unitPrice
-    movementByMonth.set(key, item)
+  if (method === 'lot') {
+    revenue = revenueCents / 100
+    cogs = cogsCents / 100
+    writeOffCost = writeOffCents / 100
   }
-  for (const purchase of workspace.purchases.filter(isActive)) {
-    const key = purchase.date.slice(0, 7)
-    const item = movementByMonth.get(key) ?? { month: '', sales: 0, expenses: 0 }
-    item.month = new Intl.DateTimeFormat('ru-RU', { month: 'short' }).format(new Date(`${key}-15T12:00:00`)).replace('.', '')
-    item.expenses += purchase.quantity * purchase.unitPrice + purchase.extra
-    movementByMonth.set(key, item)
+  const averageCosts = new Map<string, number>()
+  for (const [modelId, balance] of balances)
+    averageCosts.set(
+      modelId,
+      balance.quantity
+        ? balance.value / balance.quantity / (method === 'lot' ? 100 : 1)
+        : 0
+    )
+  for (const lot of lots) {
+    lot.estimated = unassignedModels.includes(lot.purchase.modelId)
+    const totalCost =
+      cents(lot.purchase.unitPrice) * lot.purchase.quantity +
+      cents(lot.purchase.extra)
+    if (method === 'lot') {
+      lot.cogs =
+        share(totalCost, lot.sold + lot.writtenOff, lot.purchase.quantity) / 100
+      lot.revenue = (lotRevenueCents.get(lot.purchase.id) ?? 0) / 100
+    }
+    lot.stockValue =
+      method === 'lot'
+        ? (totalCost -
+            share(
+              totalCost,
+              lot.sold + lot.writtenOff,
+              lot.purchase.quantity
+            )) /
+          100
+        : lot.remaining * (averageCosts.get(lot.purchase.modelId) ?? 0)
   }
-  const chart = [...movementByMonth.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-6).map(([, value]) => value)
+  const stockValue =
+    [...balances.values()].reduce((sum, balance) => sum + balance.value, 0) /
+    (method === 'lot' ? 100 : 1)
+  const quantity = [...balances.values()].reduce(
+    (sum, balance) => sum + balance.quantity,
+    0
+  )
+  const investments =
+    workspace.purchases
+      .filter(isActive)
+      .reduce(
+        (sum, p) => sum + cents(p.unitPrice) * p.quantity + cents(p.extra),
+        0
+      ) / 100
+  const salesQuantity = workspace.sales
+    .filter(isActive)
+    .reduce((sum, s) => sum + s.quantity, 0)
+  const freeQuantity = workspace.sales
+    .filter(isActive)
+    .filter((s) => s.unitPrice === 0)
+    .reduce((sum, s) => sum + s.quantity, 0)
+  const purchasedQuantity = workspace.purchases
+    .filter(isActive)
+    .reduce((sum, p) => sum + p.quantity, 0)
+  const writeOffQuantity = (workspace.writeOffs ?? [])
+    .filter(isActive)
+    .reduce((sum, w) => sum + w.quantity, 0)
   const movements: Movement[] = [
-    ...workspace.purchases.map((purchase) => ({ ...purchase, type: 'purchase' as const, name: workspace.models.find((model) => model.id === purchase.modelId)?.name ?? 'Удалённая модель', amount: -(purchase.quantity * purchase.unitPrice + purchase.extra) })),
-    ...workspace.sales.map((sale) => ({ ...sale, type: 'sale' as const, name: workspace.models.find((model) => model.id === sale.modelId)?.name ?? 'Удалённая модель', amount: sale.quantity * sale.unitPrice })),
+    ...workspace.purchases.map((p) => ({
+      ...p,
+      type: 'purchase' as const,
+      name:
+        workspace.models.find((m) => m.id === p.modelId)?.name ??
+        'Удалённая модель',
+      amount: -(p.quantity * p.unitPrice + p.extra)
+    })),
+    ...workspace.sales.map((s) => ({
+      ...s,
+      type: 'sale' as const,
+      name:
+        workspace.models.find((m) => m.id === s.modelId)?.name ??
+        'Удалённая модель',
+      amount: s.quantity * s.unitPrice
+    })),
+    ...(workspace.writeOffs ?? []).map((w) => ({
+      ...w,
+      type: 'writeoff' as const,
+      name:
+        workspace.models.find((m) => m.id === w.modelId)?.name ??
+        'Удалённая модель',
+      amount: -(movementCosts.get(`writeoff:${w.id}`) ?? 0)
+    }))
   ].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
-  const averageCosts = new Map([...modelBalances.entries()].map(([modelId, balance]) => [modelId, balance.quantity ? balance.value / balance.quantity : 0]))
-  return { lots: lots.sort((a, b) => b.purchase.date.localeCompare(a.purchase.date)), revenue, cogs, stockValue, quantity, investments, profit, chart, movements, averageCosts }
-}
-
-export function availableOn(workspace: Workspace, modelId: string, date: string) {
-  const events = [
-    ...workspace.purchases.filter(isActive).filter((purchase) => purchase.modelId === modelId && purchase.date <= date).map((purchase) => ({ date: purchase.date, type: 'purchase' as const, quantity: purchase.quantity })),
-    ...workspace.sales.filter(isActive).filter((sale) => sale.modelId === modelId && sale.date <= date).map((sale) => ({ date: sale.date, type: 'sale' as const, quantity: sale.quantity })),
-  ].sort((a, b) => a.date.localeCompare(b.date) || (a.type === b.type ? 0 : a.type === 'purchase' ? -1 : 1))
-  return Math.max(0, events.reduce((balance, event) => balance + (event.type === 'purchase' ? event.quantity : -event.quantity), 0))
-}
-
-export function hasStockForSales(workspace: Workspace) {
-  const events = [
-    ...workspace.purchases.filter(isActive).map((purchase) => ({ modelId: purchase.modelId, date: purchase.date, type: 'purchase' as const, quantity: purchase.quantity })),
-    ...workspace.sales.filter(isActive).map((sale) => ({ modelId: sale.modelId, date: sale.date, type: 'sale' as const, quantity: sale.quantity })),
-  ].sort((a, b) => a.date.localeCompare(b.date) || (a.type === b.type ? 0 : a.type === 'purchase' ? -1 : 1))
-  const balances = new Map<string, number>()
-  for (const event of events) {
-    const next = (balances.get(event.modelId) ?? 0) + (event.type === 'purchase' ? event.quantity : -event.quantity)
-    if (next < 0) return false
-    balances.set(event.modelId, next)
+  return {
+    lots: lots.sort((a, b) => b.purchase.date.localeCompare(a.purchase.date)),
+    revenue,
+    cogs,
+    writeOffCost,
+    stockValue,
+    quantity,
+    investments,
+    profit:
+      method === 'lot' ? (revenueCents - cogsCents) / 100 : revenue - cogs,
+    movements,
+    averageCosts,
+    salesQuantity,
+    freeQuantity,
+    purchasedQuantity,
+    writeOffQuantity,
+    unassignedModels,
+    allocationsByEntry,
+    movementCosts,
+    chart: []
   }
-  return true
+}
+export function availableOn(
+  workspace: Workspace,
+  modelId: string,
+  date: string
+) {
+  return (
+    workspace.purchases
+      .filter(isActive)
+      .filter((p) => p.modelId === modelId && p.date <= date)
+      .reduce((sum, p) => sum + p.quantity, 0) -
+    workspace.sales
+      .filter(isActive)
+      .filter((s) => s.modelId === modelId && s.date <= date)
+      .reduce((sum, s) => sum + s.quantity, 0) -
+    (workspace.writeOffs ?? [])
+      .filter(isActive)
+      .filter((w) => w.modelId === modelId && w.date <= date)
+      .reduce((sum, w) => sum + w.quantity, 0)
+  )
+}
+export function hasStockForSales(workspace: Workspace) {
+  try {
+    derive(workspace)
+    return true
+  } catch {
+    return false
+  }
+}
+export function withoutEntry(workspace: Workspace, ref?: EntryRef): Workspace {
+  return ref
+    ? {
+        ...workspace,
+        sales: workspace.sales.filter(
+          (s) => ref.type !== 'sale' || s.id !== ref.id
+        ),
+        writeOffs: (workspace.writeOffs ?? []).filter(
+          (w) => ref.type !== 'writeoff' || w.id !== ref.id
+        )
+      }
+    : workspace
 }

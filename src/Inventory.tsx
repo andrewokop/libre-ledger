@@ -1,31 +1,317 @@
 import { useState, type CSSProperties } from 'react'
-import { Activity, Boxes, ChevronDown, Filter, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { Boxes, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { derive } from './accounting'
-import { modelAccent, money, shortDate, type EntryRef, type Model, type Workspace } from './types'
+import {
+  expiryLabel,
+  expiredOn,
+  expirySoon,
+  settingsFor,
+  modelAccent,
+  money,
+  shortDate,
+  type EntryRef,
+  type Model,
+  type Workspace
+} from './types'
 import { Amount } from './ui'
 
-export function Inventory({ workspace, stats, search, setSearch, filterModel, setFilterModel, onAddModel, onEdit, onEditModel, onDeleteModel }: { workspace: Workspace; stats: ReturnType<typeof derive>; search: string; setSearch: (value: string) => void; filterModel: string; setFilterModel: (value: string) => void; onAddModel: () => void; onEdit: (ref: EntryRef) => void; onEditModel: (model: Model) => void; onDeleteModel: (model: Model) => void }) {
-  const [onlyInStock, setOnlyInStock] = useState(false)
-  const [tab, setTab] = useState<'lots' | 'models'>(workspace.models.length ? 'lots' : 'models')
-  const filtered = stats.lots.filter((lot) => (!onlyInStock || lot.remaining > 0) && (filterModel === 'all' || lot.purchase.modelId === filterModel) && workspace.models.find((model) => model.id === lot.purchase.modelId)?.name.toLowerCase().includes(search.toLowerCase().trim()))
-  return <div className="page-stack">
-    <section className="inventory-summary"><div><span>В наличии</span><strong>{stats.quantity}<small> шт.</small></strong></div><div><span>Деньги в товаре</span><strong><Amount value={stats.stockValue} /></strong></div><div><span>Активных партий</span><strong>{stats.lots.filter((lot) => lot.remaining > 0).length}</strong></div></section>
-    <section className="panel inventory-panel"><div className="panel-head"><h2>{tab === 'models' ? 'Мои модели' : 'Партии товара'}</h2><button className="button button-quiet" onClick={onAddModel}><Plus size={20} />Новая модель</button></div>
-      <div className="workspace-tabs" aria-label="Раздел склада"><button aria-pressed={tab === 'lots'} onClick={() => setTab('lots')}>Партии <span>{stats.lots.length}</span></button><button aria-pressed={tab === 'models'} onClick={() => setTab('models')}>Модели <span>{workspace.models.length}</span></button></div>
-      {tab === 'models' ? <div className="model-catalog">{workspace.models.map((model) => {
-        const quantity = stats.lots.filter((lot) => lot.purchase.modelId === model.id).reduce((sum, lot) => sum + lot.remaining, 0)
-        const count = [...workspace.purchases, ...workspace.sales].filter((entry) => entry.modelId === model.id).length
-        return <div className="catalog-row" key={model.id} style={{ '--model-color': modelAccent(model.color) } as CSSProperties}><span className="model-marker" /><div className="catalog-copy"><strong>{model.name}</strong><span>В наличии: {quantity} шт. · Операций: {count}</span></div><div className="catalog-actions"><button className="button button-quiet" onClick={() => onEditModel(model)}><Pencil size={18} />Изменить</button><button className="icon-button danger-icon" onClick={() => onDeleteModel(model)} aria-label={`Удалить модель ${model.name}`} title="Удалить модель"><Trash2 size={20} /></button></div></div>
-      })}{!workspace.models.length && <div className="empty-state"><Boxes size={35} /><strong>Здесь будут только ваши товары</strong><span>Добавьте первую модель. Готовых каталогов и примеров больше нет.</span></div>}</div> : <>
-      <div className="filter-row"><label className="search-field"><Search size={20} /><input aria-label="Найти модель" placeholder="Найти модель" value={search} onChange={(event) => setSearch(event.target.value)} />{search && <button aria-label="Очистить поиск" onClick={() => setSearch('')}><X size={18} /></button>}</label><label className="filter-select"><Filter size={19} /><select aria-label="Фильтр по модели" value={filterModel} onChange={(event) => setFilterModel(event.target.value)}><option value="all">Все модели</option>{workspace.models.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}</select><ChevronDown size={17} /></label><button className={`filter-chip ${onlyInStock ? 'filter-chip-active' : ''}`} aria-pressed={onlyInStock} onClick={() => setOnlyInStock(!onlyInStock)}>В наличии</button></div>
-      <div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th scope="col">Модель и закупка</th><th scope="col">Остаток</th><th scope="col">Себестоимость / шт.</th><th scope="col">Выручка</th><th scope="col">Окупаемость</th><th scope="col">Действия</th></tr></thead><tbody>{filtered.map((lot) => {
-        const model = workspace.models.find((item) => item.id === lot.purchase.modelId)
-        const invested = lot.purchase.quantity * lot.purchase.unitPrice + lot.purchase.extra
-        const returned = invested ? lot.revenue / invested * 100 : 0
-        return <tr key={lot.purchase.id} style={{ '--model-color': modelAccent(model?.color ?? '#526df4') } as CSSProperties}><td><div className="lot-model-cell"><span className="model-marker" /><span><strong>{model?.name ?? 'Товар'}</strong><small>{shortDate(lot.purchase.date)} · закуплено {lot.purchase.quantity} шт.</small></span></div></td><td data-label="Остаток"><strong className="table-primary stock-number">{lot.remaining} шт.</strong><small className="table-secondary">продано {lot.sold}</small></td><td data-label="Себестоимость / шт."><strong className="table-primary"><Amount value={lot.purchase.unitPrice + lot.purchase.extra / lot.purchase.quantity} /></strong><small className="table-secondary">{money(invested)} ₽ за партию</small></td><td data-label="Выручка"><strong className="table-primary positive-text"><Amount value={lot.revenue} /></strong><small className="table-secondary">прибыль {money(lot.revenue - lot.cogs)} ₽</small></td><td data-label="Окупаемость"><div className="payback"><div className="payback-label"><strong>{Math.round(returned)}%</strong><span>{returned >= 100 ? 'окуплено' : 'вернулось'}</span></div><div className="progress-track"><span style={{ width: `${Math.min(returned, 100)}%` }} /></div></div></td><td className="inventory-actions"><button className="text-link" onClick={() => onEdit({ type: 'purchase', id: lot.purchase.id })}><Pencil size={17} />Изменить</button></td></tr>
-      })}</tbody></table>{!filtered.length && <div className="empty-state"><Boxes size={35} /><strong>{stats.lots.length ? 'Ничего не найдено' : 'Склад пока пуст'}</strong><span>{stats.lots.length ? 'Попробуйте изменить поиск или фильтры.' : 'Добавьте закупку кнопкой вверху страницы.'}</span>{stats.lots.length > 0 && <button className="button button-quiet" onClick={() => { setSearch(''); setFilterModel('all'); setOnlyInStock(false) }}>Сбросить фильтры</button>}</div>}</div>
-      <div className="inventory-note"><Activity size={19} /><span>Себестоимость включает доставку. Продажи списываются по средней цене модели.</span></div>
-      </>}
-    </section>
-  </div>
+export function Inventory({
+  workspace,
+  stats,
+  search,
+  setSearch,
+  filterModel,
+  setFilterModel,
+  onAddModel,
+  onEdit,
+  onEditModel,
+  onDeleteModel,
+  onSell,
+  onWriteOff,
+  editable = true
+}: {
+  workspace: Workspace
+  stats: ReturnType<typeof derive>
+  search: string
+  setSearch: (value: string) => void
+  filterModel: string
+  setFilterModel: (value: string) => void
+  onAddModel: () => void
+  onEdit: (ref: EntryRef) => void
+  onEditModel: (model: Model) => void
+  onDeleteModel: (model: Model) => void
+  onSell?: (modelId: string, purchaseId?: string) => void
+  onWriteOff?: (modelId: string, purchaseId?: string) => void
+  editable?: boolean
+}) {
+  const [tab, setTab] = useState<'lots' | 'models'>(
+    workspace.models.length ? 'lots' : 'models'
+  )
+  const [expiryFilter, setExpiryFilter] = useState('all')
+  const [month, setMonth] = useState('')
+  const filtered = stats.lots.filter(
+    (lot) =>
+      lot.remaining > 0 &&
+      (filterModel === 'all' || lot.purchase.modelId === filterModel) &&
+      (workspace.models
+        .find((m) => m.id === lot.purchase.modelId)
+        ?.name.toLocaleLowerCase('ru')
+        .includes(search.toLocaleLowerCase('ru').trim()) ??
+        false) &&
+      (expiryFilter === 'all' ||
+        (expiryFilter === 'unknown' && !lot.purchase.expiry) ||
+        (expiryFilter === 'expired' && expiredOn(lot.purchase.expiry)) ||
+        (expiryFilter === 'soon' &&
+          expirySoon(
+            lot.purchase.expiry,
+            settingsFor(workspace).expiryWarningDays
+          )) ||
+        (expiryFilter === 'exact' && lot.purchase.expiry === month))
+  )
+  const groups = new Map<string, typeof filtered>()
+  for (const lot of filtered) {
+    const key = `${lot.purchase.modelId}|${lot.purchase.expiry ?? ''}`
+    groups.set(key, [...(groups.get(key) ?? []), lot])
+  }
+  return (
+    <div className="page-stack">
+      <section className="inventory-summary">
+        <div>
+          <span>В наличии</span>
+          <strong>
+            {stats.quantity}
+            <small> шт.</small>
+          </strong>
+        </div>
+        <div>
+          <span>Стоимость остатка</span>
+          <strong>
+            <Amount value={stats.stockValue} />
+          </strong>
+        </div>
+        <div>
+          <span>Партий в наличии</span>
+          <strong>{stats.lots.filter((l) => l.remaining > 0).length}</strong>
+        </div>
+      </section>
+      <section className="panel inventory-panel">
+        <div className="panel-head">
+          <h2>{tab === 'models' ? 'Мои модели' : 'Остатки по срокам'}</h2>
+          <button
+            className="button button-quiet"
+            onClick={onAddModel}
+            disabled={!editable}
+          >
+            <Plus size={20} />
+            Новая модель
+          </button>
+        </div>
+        <div className="workspace-tabs">
+          <button aria-pressed={tab === 'lots'} onClick={() => setTab('lots')}>
+            Партии
+          </button>
+          <button
+            aria-pressed={tab === 'models'}
+            onClick={() => setTab('models')}
+          >
+            Модели <span>{workspace.models.length}</span>
+          </button>
+        </div>
+        {tab === 'models' ? (
+          <div className="model-catalog">
+            {workspace.models.map((model) => (
+              <div
+                className="catalog-row"
+                key={model.id}
+                style={
+                  { '--model-color': modelAccent(model.color) } as CSSProperties
+                }
+              >
+                <span className="model-marker" />
+                <div className="catalog-copy">
+                  <strong>{model.name}</strong>
+                  <span>
+                    В наличии:{' '}
+                    {stats.lots
+                      .filter((l) => l.purchase.modelId === model.id)
+                      .reduce((s, l) => s + l.remaining, 0)}{' '}
+                    шт.
+                  </span>
+                </div>
+                <div className="catalog-actions">
+                  <button
+                    className="button button-quiet"
+                    onClick={() => onEditModel(model)}
+                    disabled={!editable}
+                  >
+                    <Pencil size={18} />
+                    Изменить
+                  </button>
+                  <button
+                    className="icon-button danger-icon"
+                    onClick={() => onDeleteModel(model)}
+                    disabled={!editable}
+                    aria-label={`Удалить модель ${model.name}`}
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!workspace.models.length && (
+              <div className="empty-state">
+                <Boxes size={35} />
+                <strong>Добавьте первую модель</strong>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="filter-row">
+              <label className="search-field">
+                <input
+                  aria-label="Найти модель"
+                  placeholder="Найти модель"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </label>
+              <label className="filter-select">
+                <select
+                  aria-label="Фильтр по модели"
+                  value={filterModel}
+                  onChange={(e) => setFilterModel(e.target.value)}
+                >
+                  <option value="all">Все модели</option>
+                  {workspace.models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-select">
+                <select
+                  aria-label="Фильтр по сроку"
+                  value={expiryFilter}
+                  onChange={(e) => setExpiryFilter(e.target.value)}
+                >
+                  <option value="all">Все сроки</option>
+                  <option value="soon">Скоро истекает</option>
+                  <option value="expired">Просрочено</option>
+                  <option value="unknown">Срок не указан</option>
+                  <option value="exact">Конкретный месяц</option>
+                </select>
+              </label>
+              {expiryFilter === 'exact' && (
+                <input
+                  aria-label="Месяц срока"
+                  type="month"
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                />
+              )}
+            </div>
+            <div className="lot-groups">
+              {[...groups.entries()].map(([key, lots]) => {
+                const first = lots[0],
+                  model = workspace.models.find(
+                    (m) => m.id === first.purchase.modelId
+                  )
+                return (
+                  <details
+                    className={`lot-group ${expiredOn(first.purchase.expiry) ? 'lot-expired' : expirySoon(first.purchase.expiry, settingsFor(workspace).expiryWarningDays) ? 'lot-soon' : ''}`}
+                    key={key}
+                    style={
+                      {
+                        '--model-color': modelAccent(model?.color ?? '#526df4')
+                      } as CSSProperties
+                    }
+                  >
+                    <summary>
+                      <span>
+                        <strong>{model?.name ?? 'Товар'}</strong>
+                        <small>
+                          {expiryLabel(first.purchase.expiry)}
+                          {expiredOn(first.purchase.expiry)
+                            ? ' · просрочено'
+                            : expirySoon(
+                                  first.purchase.expiry,
+                                  settingsFor(workspace).expiryWarningDays
+                                )
+                              ? ' · скоро истекает'
+                              : ''}
+                        </small>
+                      </span>
+                      <span>
+                        <strong>
+                          {lots.reduce((s, l) => s + l.remaining, 0)} шт.
+                        </strong>
+                        <small>
+                          <Amount
+                            value={lots.reduce((s, l) => s + l.stockValue, 0)}
+                          />
+                        </small>
+                      </span>
+                    </summary>
+                    {lots.map((lot) => (
+                      <div className="lot-detail" key={lot.purchase.id}>
+                        <span>
+                          Закупка {shortDate(lot.purchase.date)} ·{' '}
+                          {lot.remaining} шт. · цена{' '}
+                          {money(lot.purchase.unitPrice)} ₽/шт. · доставка{' '}
+                          {money(lot.purchase.extra)} ₽ ·{' '}
+                          <Amount value={lot.stockValue} />
+                          {lot.estimated && <small>Остаток оценочный</small>}
+                        </span>
+                        <div className="lot-actions">
+                          <button
+                            className="text-link"
+                            disabled={!editable}
+                            onClick={() =>
+                              onSell?.(lot.purchase.modelId, lot.purchase.id)
+                            }
+                          >
+                            Продать
+                          </button>
+                          <button
+                            className="text-link"
+                            disabled={!editable}
+                            onClick={() =>
+                              onWriteOff?.(
+                                lot.purchase.modelId,
+                                lot.purchase.id
+                              )
+                            }
+                          >
+                            Списать
+                          </button>
+                          <button
+                            className="text-link"
+                            disabled={!editable}
+                            onClick={() =>
+                              onEdit({ type: 'purchase', id: lot.purchase.id })
+                            }
+                          >
+                            Изменить
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </details>
+                )
+              })}
+              {!groups.size && (
+                <div className="empty-state">
+                  <Boxes size={35} />
+                  <strong>Партии не найдены</strong>
+                  <span>Измените фильтры или добавьте закупку.</span>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  )
 }

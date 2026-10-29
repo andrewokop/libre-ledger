@@ -1,0 +1,280 @@
+/* Warehouse and settings */
+.lot-groups {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+.lot-group {
+  border: 1px solid var(--border, #dce1ea);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.lot-group summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+}
+.lot-group summary > span,
+.lot-detail > span {
+  display: grid;
+  gap: 4px;
+}
+.lot-group small,
+.lot-detail small {
+  color: #35415c;
+  font-size: 16px;
+}
+.lot-detail {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-top: 1px solid #e5e7eb;
+}
+.lot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.lot-picker {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid #dce1ea;
+  border-radius: 12px;
+}
+.lot-picker p {
+  margin: 0;
+}
+.lot-row,
+.allocation-row {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+}
+.lot-row label {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+}
+.lot-row input,
+.allocation-row input {
+  min-width: 0;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cdd4e0;
+  border-radius: 8px;
+}
+.allocation-row {
+  justify-content: space-between;
+  align-items: center;
+}
+.allocation-row input {
+  width: 85px;
+}
+.settings-wide {
+  grid-column: 1 / -1;
+}
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 0 20px;
+}
+.settings-advanced {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid #dce1ea;
+  border-radius: 12px;
+}
+.settings-advanced summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.method-comparison {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+html[data-font-size='normal'] body {
+  zoom: 1;
+}
+html[data-font-size='large'] body {
+  zoom: 1.1;
+}
+html[data-font-size='xlarge'] body {
+  zoom: 1.25;
+}
+html[data-reduced-motion='true'] *,
+html[data-reduced-motion='true'] *::before,
+html[data-reduced-motion='true'] *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+@media (max-width: 600px) {
+  .lot-detail {
+    flex-direction: column;
+  }
+  .lot-row {
+    flex-wrap: wrap;
+  }
+  .lot-group summary {
+    align-items: flex-start;
+  }
+}
+
+.reconciliation-list {
+  display: grid;
+  gap: 8px;
+}
+.reconciliation-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.history-date-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin: 12px 0;
+}
+.history-date-filters label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.settings-check input {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  accent-color: #3046bf;
+}
+.settings-check input:focus-visible {
+  outline: 3px solid #263db5;
+  outline-offset: 3px;
+}
+
+/* Allow enlarged layouts to reflow on narrow screens. */
+html[data-font-size] body {
+  min-width: 0;
+}
+
+body {
+  min-width: 0;
+}
+.settings-fields > *,
+.lot-picker > *,
+.lot-group summary > span,
+.lot-detail > span {
+  min-width: 0;
+}
+.lot-group summary > span,
+.lot-detail > span {
+  overflow-wrap: anywhere;
+}
+.lot-group .currency-unit,
+.lot-detail .currency-unit {
+  display: inline;
+}
+
+.lot-group {
+  border-left: 4px solid var(--model-color, #bdc5d8);
+}
+.lot-expired > summary > span:first-child > small {
+  color: #8f1d2b;
+  font-weight: 600;
+}
+.lot-soon > summary > span:first-child > small {
+  color: #713b1b;
+  font-weight: 600;
+}
+.workspace-label > span:last-child {
+  min-width: 0;
+}
+.workspace-label strong,
+.topbar-workspace {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+/* Keep fixed navigation usable when the reading size is enlarged. */
+@media (max-width: 380px) {
+  html[data-font-size='xlarge'] .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    gap: 8px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+  html[data-font-size='xlarge'] .topbar-right {
+    margin-left: auto;
+  }
+  html[data-font-size='xlarge'] .bottom-nav {
+    padding-right: 4px;
+    padding-left: 4px;
+  }
+  html[data-font-size='xlarge'] .bottom-nav > button {
+    min-width: 0;
+    font-size: 11.2px;
+  }
+}
+.page-content {
+  animation: none;
+}
+
+.allocation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
+  align-items: center;
+}
+.allocation-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.allocation-row input {
+  width: 100%;
+  min-height: 48px;
+}
+
+.settings-advanced > summary {
+  min-height: 48px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.lot-row input,
+.allocation-row input {
+  min-height: 48px;
+  border-color: #7885a2;
+}
+.history-date-filters label {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+.history-date-filters input {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid #7885a2;
+  border-radius: 8px;
+}
+.filter-row > input[type='month'] {
+  min-height: 48px;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #7885a2;
+  border-radius: 8px;
+}

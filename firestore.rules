@@ -2,39 +2,51 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function owner(userId) {
-      return request.auth != null
-        && request.auth.uid == userId
+      return request.auth != null && request.auth.uid == userId
         && request.auth.token.email.lower() == 'andrewokop@gmail.com'
         && request.auth.token.email_verified == true;
     }
     function valid(data) {
-      return data.keys().hasOnly(['models', 'purchases', 'sales', 'schemaVersion', 'generation', 'revision', 'appliedIds', 'updatedAt'])
-        && data.keys().hasAll(['models', 'purchases', 'sales', 'schemaVersion', 'generation', 'revision', 'appliedIds', 'updatedAt'])
-        && data.schemaVersion == 2
+      return data.keys().hasAll(['models', 'purchases', 'sales', 'schemaVersion', 'generation', 'revision', 'appliedIds', 'updatedAt'])
+        && (data.schemaVersion == 2
+          ? data.keys().hasOnly(['models', 'purchases', 'sales', 'schemaVersion', 'generation', 'revision', 'appliedIds', 'updatedAt'])
+          : data.schemaVersion == 3 && data.keys().hasOnly(['models', 'purchases', 'sales', 'writeOffs', 'settings', 'schemaVersion', 'generation', 'revision', 'appliedIds', 'updatedAt'])
+            && data.keys().hasAll(['writeOffs', 'settings']) && data.writeOffs is list && data.settings is map)
         && data.generation is string && data.generation.size() > 0 && data.generation.size() <= 100
         && data.revision is int && data.revision > 0
         && data.models is list && data.models.size() <= 100
         && data.purchases is list && data.sales is list
-        && data.purchases.size() + data.sales.size() <= 3000
-        && data.appliedIds is list && data.appliedIds.size() <= 500
-        && data.updatedAt == request.time;
+        && data.purchases.size() + data.sales.size() + (data.schemaVersion == 3 ? data.writeOffs.size() : 0) <= 3000
+        && data.appliedIds is list && data.appliedIds.size() <= 500 && data.updatedAt == request.time;
+    }
+    function archived(userId) {
+      return existsAfter(/databases/$(database)/documents/users/$(userId)/workspace/pre-v3)
+        && getAfter(/databases/$(database)/documents/users/$(userId)/workspace/pre-v3).data == resource.data;
     }
     match /users/{userId}/workspace/main {
       allow get: if owner(userId);
       allow create: if owner(userId) && valid(request.resource.data) && request.resource.data.revision == 1;
-      allow update: if owner(userId) && valid(request.resource.data)
-        && (resource.data.get('schemaVersion', 0) != 2
-          ? request.resource.data.revision == 1
-            && request.resource.data.models.size() == 0
-            && request.resource.data.purchases.size() == 0
-            && request.resource.data.sales.size() == 0
-          // Optimistic transactions must reach their read precondition check,
-          // including when another transaction has just advanced the revision.
-          : request.resource.data.revision >= resource.data.revision
-            && request.resource.data.revision <= resource.data.revision + 1
-            && (request.resource.data.generation != resource.data.generation
-              || request.resource.data.appliedIds != resource.data.appliedIds));
+      allow update: if owner(userId) && valid(request.resource.data) && (
+        (resource.data.get('schemaVersion', 0) == request.resource.data.schemaVersion
+          && request.resource.data.revision >= resource.data.revision
+          && request.resource.data.revision <= resource.data.revision + 1
+          && (request.resource.data.generation != resource.data.generation || request.resource.data.appliedIds != resource.data.appliedIds))
+        || (request.resource.data.schemaVersion == 3 && resource.data.get('schemaVersion', 0) in [0, 2]
+          && archived(userId)
+          && request.resource.data.models == resource.data.models
+          && request.resource.data.purchases == resource.data.purchases
+          && request.resource.data.sales == resource.data.sales
+          && request.resource.data.writeOffs.size() == 0
+          && (resource.data.get('schemaVersion', 0) == 2
+            ? request.resource.data.generation == resource.data.generation && request.resource.data.revision == resource.data.revision + 1 && request.resource.data.appliedIds == resource.data.appliedIds
+            : request.resource.data.revision == 1 && request.resource.data.appliedIds.size() == 0))
+      );
       allow delete: if false;
+    }
+    match /users/{userId}/workspace/pre-v3 {
+      allow get: if owner(userId);
+      allow create: if owner(userId) && request.resource.data == get(/databases/$(database)/documents/users/$(userId)/workspace/main).data;
+      allow update, delete: if false;
     }
   }
 }
