@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from 'react'
-import { Boxes, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Boxes, ChevronDown, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import type { derive } from './accounting'
 import {
   expiryLabel,
@@ -171,6 +171,7 @@ export function Inventory({
           <>
             <div className="filter-row">
               <label className="search-field">
+                <Search size={18} aria-hidden="true" />
                 <input
                   aria-label="Найти модель"
                   placeholder="Найти модель"
@@ -245,7 +246,7 @@ export function Inventory({
                               : ''}
                         </small>
                       </span>
-                      <span>
+                      <span className="lot-group-total">
                         <strong>
                           {lots.reduce((s, l) => s + l.remaining, 0)} шт.
                         </strong>
@@ -255,17 +256,34 @@ export function Inventory({
                           />
                         </small>
                       </span>
+                      <ChevronDown size={18} aria-hidden="true" />
                     </summary>
                     {lots.map((lot) => (
                       <div className="lot-detail" key={lot.purchase.id}>
-                        <span>
-                          Закупка {shortDate(lot.purchase.date)} ·{' '}
-                          {lot.remaining} шт. · цена{' '}
-                          {money(lot.purchase.unitPrice)} ₽/шт. · доставка{' '}
-                          {money(lot.purchase.extra)} ₽ ·{' '}
-                          <Amount value={lot.stockValue} />
+                        <div className="lot-detail-copy">
+                          <strong>Закупка {shortDate(lot.purchase.date)}</strong>
+                          <dl className="lot-detail-facts">
+                            <div>
+                              <dt>Осталось</dt>
+                              <dd>{lot.remaining} шт.</dd>
+                            </div>
+                            <div>
+                              <dt>Цена</dt>
+                              <dd>{money(lot.purchase.unitPrice)} ₽/шт.</dd>
+                            </div>
+                            <div>
+                              <dt>Стоимость</dt>
+                              <dd><Amount value={lot.stockValue} /></dd>
+                            </div>
+                            {lot.purchase.extra > 0 && (
+                              <div>
+                                <dt>Доставка</dt>
+                                <dd><Amount value={lot.purchase.extra} /></dd>
+                              </div>
+                            )}
+                          </dl>
                           {lot.estimated && <small>Остаток оценочный</small>}
-                        </span>
+                        </div>
                         <div className="lot-actions">
                           <button
                             className="text-link"

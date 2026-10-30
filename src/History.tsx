@@ -149,7 +149,7 @@ export function History({
                   {movement.name}
                   {movement.type === 'purchase' && 'expiry' in movement && (
                     <small className="operation-note">
-                      Годен до: {expiryLabel(movement.expiry)}
+                      {movement.expiry ? `Годен до: ${expiryLabel(movement.expiry)}` : 'Срок не указан'}
                     </small>
                   )}
                   {movement.type !== 'purchase' &&
@@ -201,8 +201,16 @@ export function History({
         {!filtered.length && (
           <div className="empty-state">
             <ArrowLeftRight size={35} />
-            <strong>Здесь пока нет записей</strong>
-            <span>Операции появятся после добавления закупки или продажи.</span>
+            <strong>{movements.length ? 'По этим условиям операций нет' : 'Здесь пока нет записей'}</strong>
+            <span>{movements.length ? 'Измените фильтры или посмотрите всю историю.' : 'Операции появятся после добавления закупки или продажи.'}</span>
+            {movements.length > 0 && (
+              <button className="text-link" onClick={() => {
+                setFilter('all')
+                setStatus('all')
+                setStart('')
+                setEnd('')
+              }}>Сбросить фильтры</button>
+            )}
           </div>
         )}
       </div>

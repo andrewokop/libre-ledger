@@ -222,7 +222,7 @@ export function Overview({
         )}
         <div className="v3-chart-foot">
           <span>
-            По 7 дней · последний интервал может быть неполным
+            По неделям · до {shortDate(flow.end)}
           </span>
           <button
             className="v3-link"
@@ -309,7 +309,7 @@ export function Overview({
         <div>
           {stats.movements.slice(0, 4).map((movement) => (
             <div
-              className="v3-activity-row"
+              className={`v3-activity-row v3-activity-${movement.type}`}
               key={`${movement.type}-${movement.id}`}
             >
               <span className="v3-activity-icon">

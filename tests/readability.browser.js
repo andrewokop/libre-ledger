@@ -32,6 +32,12 @@ async (page) => {
         await page.waitForTimeout(50);
         const layout=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
         checks.push(`${name}-${font}-${width}`);if(layout.scroll>width)failures.push({name,font,width,layout});
+        if(name==='Склад'&&font==='xlarge'&&width===320) {
+          await page.getByRole('button',{name:'Новая модель',exact:true}).click();
+          const palette=await page.locator('.modal-box').evaluate(box=>{const bounds=box.getBoundingClientRect();return {documentFits:document.documentElement.scrollWidth<=innerWidth+2,dialogFits:box.scrollWidth<=box.clientWidth+2,labelsFit:[...box.querySelectorAll('.palette-option span')].every(span=>{const rect=span.getBoundingClientRect();return rect.left>=bounds.left-1&&rect.right<=bounds.right+1})}});
+          checks.push('model-palette-xlarge-320');if(!Object.values(palette).every(Boolean))failures.push({name:'model-palette',font,width,palette});
+          await page.locator('.modal-box').getByRole('button',{name:'Закрыть',exact:true}).first().click();
+        }
       }
       await nav.getByRole('button',{name:'Обзор',exact:true}).click();
     }

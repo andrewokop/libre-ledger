@@ -35,8 +35,7 @@ export default function FinanceChart({
         >
           <CartesianGrid
             vertical={false}
-            stroke="#d7dced"
-            strokeDasharray="3 5"
+            stroke="#e5e9f2"
           />
           <XAxis
             dataKey="label"
@@ -73,8 +72,8 @@ export default function FinanceChart({
           <Line
             type="linear"
             dataKey={unit === 'rub' ? 'sales' : 'quantity'}
-            stroke="#3d4dc2"
-            strokeWidth={3}
+            stroke="#3046bf"
+            strokeWidth={2.5}
             dot={data.length === 1 ? { r: 4, fill: '#3d4dc2' } : false}
             activeDot={{
               r: 5,

@@ -160,112 +160,125 @@ export function WorkspaceSettings({
     <div className="settings-grid">
       <section className="panel settings-panel settings-wide">
         <h2>Настройки учёта</h2>
-        <div className="settings-fields">
-          <label className="form-label">
-            Название магазина
-            <input
-              maxLength={60}
-              value={draft.storeName}
-              onChange={(e) => update('storeName', e.target.value)}
-            />
-          </label>
-          <label className="form-label">
-            Начальная страница
-            <select
-              value={draft.homePage}
-              onChange={(e) =>
-                update('homePage', e.target.value as LedgerSettings['homePage'])
-              }
-            >
-              <option value="overview">Главная</option>
-              <option value="inventory">Склад</option>
-              <option value="history">Операции</option>
-              <option value="settings">Настройки</option>
-            </select>
-          </label>
-          <label className="form-label">
-            Главный показатель
-            <select
-              value={draft.primaryMetric}
-              onChange={(e) =>
-                update(
-                  'primaryMetric',
-                  e.target.value as LedgerSettings['primaryMetric']
-                )
-              }
-            >
-              <option value="profit">Прибыль</option>
-              <option value="revenue">Продажи</option>
-              <option value="investments">Закупки</option>
-              <option value="stockValue">На складе</option>
-            </select>
-          </label>
-          <label className="form-label">
-            Период графика
-            <select
-              value={draft.chartMonths}
-              onChange={(e) =>
-                update('chartMonths', Number(e.target.value) as 1 | 3 | 6)
-              }
-            >
-              <option value="1">1 месяц</option>
-              <option value="3">3 месяца</option>
-              <option value="6">6 месяцев</option>
-            </select>
-          </label>
-          <label className="form-label">
-            График по умолчанию
-            <select
-              value={draft.chartUnit}
-              onChange={(e) =>
-                update('chartUnit', e.target.value as 'rub' | 'quantity')
-              }
-            >
-              <option value="rub">Рубли</option>
-              <option value="quantity">Штуки</option>
-            </select>
-          </label>
-          <label className="form-label">
-            Предупреждать о сроке за дней
-            <input
-              type="number"
-              min="0"
-              max="730"
-              value={draft.expiryWarningDays}
-              onChange={(e) =>
-                update('expiryWarningDays', Number(e.target.value))
-              }
-            />
-          </label>
-          <label className="form-label">
-            Низкий остаток, шт.
-            <input
-              type="number"
-              min="0"
-              max="1000000"
-              value={draft.lowStockThreshold}
-              onChange={(e) =>
-                update('lowStockThreshold', Number(e.target.value))
-              }
-            />
-          </label>
-          <label className="form-label">
-            Предлагать партии
-            <select
-              value={draft.lotSelection}
-              onChange={(e) =>
-                update(
-                  'lotSelection',
-                  e.target.value as LedgerSettings['lotSelection']
-                )
-              }
-            >
-              <option value="fefo">Ближайший срок</option>
-              <option value="fifo">Сначала ранние закупки</option>
-              <option value="manual">Вручную</option>
-            </select>
-          </label>
-        </div>
+        <fieldset className="settings-fieldset">
+          <legend>Магазин</legend>
+          <div className="settings-fields">
+            <label className="form-label">
+              Название магазина
+              <input
+                maxLength={60}
+                value={draft.storeName}
+                onChange={(e) => update('storeName', e.target.value)}
+              />
+            </label>
+            <label className="form-label">
+              Начальная страница
+              <select
+                value={draft.homePage}
+                onChange={(e) =>
+                  update('homePage', e.target.value as LedgerSettings['homePage'])
+                }
+              >
+                <option value="overview">Главная</option>
+                <option value="inventory">Склад</option>
+                <option value="history">Операции</option>
+                <option value="settings">Настройки</option>
+              </select>
+            </label>
+            <label className="form-label">
+              Главный показатель
+              <select
+                value={draft.primaryMetric}
+                onChange={(e) =>
+                  update(
+                    'primaryMetric',
+                    e.target.value as LedgerSettings['primaryMetric']
+                  )
+                }
+              >
+                <option value="profit">Прибыль</option>
+                <option value="revenue">Продажи</option>
+                <option value="investments">Закупки</option>
+                <option value="stockValue">На складе</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
+        <fieldset className="settings-fieldset">
+          <legend>График продаж</legend>
+          <div className="settings-fields">
+            <label className="form-label">
+              Период графика
+              <select
+                value={draft.chartMonths}
+                onChange={(e) =>
+                  update('chartMonths', Number(e.target.value) as 1 | 3 | 6)
+                }
+              >
+                <option value="1">1 месяц</option>
+                <option value="3">3 месяца</option>
+                <option value="6">6 месяцев</option>
+              </select>
+            </label>
+            <label className="form-label">
+              График по умолчанию
+              <select
+                value={draft.chartUnit}
+                onChange={(e) =>
+                  update('chartUnit', e.target.value as 'rub' | 'quantity')
+                }
+              >
+                <option value="rub">Рубли</option>
+                <option value="quantity">Штуки</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
+        <fieldset className="settings-fieldset">
+          <legend>Склад и сроки</legend>
+          <div className="settings-fields">
+            <label className="form-label">
+              Предупреждать о сроке за дней
+              <input
+                type="number"
+                min="0"
+                max="730"
+                value={draft.expiryWarningDays}
+                onChange={(e) =>
+                  update('expiryWarningDays', Number(e.target.value))
+                }
+              />
+            </label>
+            <label className="form-label">
+              Низкий остаток, шт.
+              <input
+                type="number"
+                min="0"
+                max="1000000"
+                value={draft.lowStockThreshold}
+                onChange={(e) =>
+                  update('lowStockThreshold', Number(e.target.value))
+                }
+              />
+            </label>
+            <label className="form-label">
+              Предлагать партии
+              <select
+                value={draft.lotSelection}
+                onChange={(e) =>
+                  update(
+                    'lotSelection',
+                    e.target.value as LedgerSettings['lotSelection']
+                  )
+                }
+              >
+                <option value="fefo">Ближайший срок</option>
+                <option value="fifo">Сначала ранние закупки</option>
+                <option value="manual">Вручную</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
         <details className="settings-advanced">
           <summary>Метод расчёта прибыли</summary>
           <label className="form-label">
@@ -385,26 +398,26 @@ export function WorkspaceSettings({
           >
             Отменить изменения
           </button>
-          <button
-            className="button button-quiet"
-            disabled={!state.ready || state.busy}
-            onClick={() => {
-              setDraft({
-                ...DEFAULT_SETTINGS,
-                version: draft.version,
-                costingMethod: draft.costingMethod
-              })
-              setDirty(true)
-              setConfirmBackup(false)
-              setSaved(
-                'Значения восстановлены. Сохраните настройки, чтобы применить их.'
-              )
-            }}
-          >
-            Восстановить настройки по умолчанию
-          </button>
         </div>
-        <p>Сброс настроек не удаляет операции и модели.</p>
+        <button
+          className="text-link settings-reset"
+          disabled={!state.ready || state.busy}
+          onClick={() => {
+            setDraft({
+              ...DEFAULT_SETTINGS,
+              version: draft.version,
+              costingMethod: draft.costingMethod
+            })
+            setDirty(true)
+            setConfirmBackup(false)
+            setSaved(
+              'Значения восстановлены. Сохраните настройки, чтобы применить их.'
+            )
+          }}
+        >
+          Вернуть значения по умолчанию
+        </button>
+        <p className="field-help">Операции и модели сохранятся.</p>
       </section>
       <section className="panel settings-panel">
         <h2>Внешний вид на этом устройстве</h2>
