@@ -16,6 +16,7 @@
 .lot-group summary::-webkit-details-marker { display: none; }
 .lot-group summary::before { content: ''; width: 4px; height: 36px; flex-shrink: 0; border-radius: 4px; background: var(--model-color, #526df4); }
 .lot-group summary:hover { background: #f8f9fe; }
+.lot-group summary:focus-visible { outline-offset: -4px; }
 .lot-group summary > span { display: grid; min-width: 0; gap: 6px; overflow-wrap: anywhere; }
 .lot-group summary > span:first-of-type { flex: 1; }
 .lot-group summary > svg { color: var(--muted); transition: transform .16s; }
