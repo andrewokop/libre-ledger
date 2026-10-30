@@ -17,6 +17,7 @@ async (page) => {
   await modal.getByRole('button', { name: 'Добавить модель' }).click();
   check((await workspace()).models[0].salePrice === 0, 'Model retains zero default price');
   await page.getByRole('button', { name: 'Добавить первую закупку' }).click();
+  check(await modal.locator('[name=quantity]').getAttribute('type') === 'hidden' && await modal.locator('textarea[name=note]').count() === 0, 'New purchase has one quantity field per lot and no comment field');
   await modal.locator('[name=unitPrice]').fill('100');
   await modal.locator('.lot-row input[placeholder="ДД-ММ-ГГГГ"]').pressSequentially('15032027');
   check(await modal.locator('.lot-row input[placeholder="ДД-ММ-ГГГГ"]').inputValue() === '15-03-2027', 'Numeric keyboard input inserts day-month-year separators');
@@ -34,7 +35,7 @@ async (page) => {
   await go('Склад'); await page.locator('.lot-group').filter({hasText:'25-04-2027'}).locator('summary').click();
   await page.locator('.lot-group').filter({hasText:'25-04-2027'}).getByRole('button',{name:'Продать'}).click();
   check(!(await modal.locator('.allocation-row').allInnerTexts()).join(' ').includes('закупка'), 'Sale lot list shows expiry and quantity without purchase dates');
-  check(await modal.locator('[name=unitPrice]').inputValue() === '0', 'Sale uses explicit zero default');
+  check(await modal.locator('[name=unitPrice]').inputValue() === '0' && await modal.locator('textarea[name=note]').count() === 0, 'Sale uses explicit zero default and has no comment field');
   await modal.locator('.allocation-row').filter({hasText:'25-04-2027'}).locator('input').fill('2');
   await modal.locator('.allocation-row').filter({hasText:'15-03-2027'}).locator('input').fill('1');
   check((await modal.locator('.allocation-total').innerText()).includes('3 шт.'), 'Lot quantities are summed');
@@ -57,7 +58,7 @@ async (page) => {
   await page.getByRole('button',{name:'Изменить продажу Сенсор'}).click(); await modal.getByRole('button',{name:'Удалить',exact:true}).click(); await modal.getByRole('button',{name:'Удалить операцию'}).click(); await modal.waitFor({state:'hidden'});
   check((await workspace()).sales.length === 0, 'Sale deletion removes record');
   await go('Склад'); await page.getByRole('button',{name:'Закупка',exact:true}).click();
-  await modal.locator('[name=quantity]').fill('2'); await modal.locator('[name=unitPrice]').fill('50'); await modal.locator('input[placeholder="ДД-ММ-ГГГГ"]').fill('31-01-2020'); await save(); await modal.waitFor({state:'hidden'});
+  await modal.locator('.lot-row input[type=number]').fill('2'); await modal.locator('[name=unitPrice]').fill('50'); await modal.locator('input[placeholder="ДД-ММ-ГГГГ"]').fill('31-01-2020'); await save(); await modal.waitFor({state:'hidden'});
   await page.locator('.lot-group').filter({hasText:'31-01-2020'}).locator('summary').click(); await page.locator('.lot-group').filter({hasText:'31-01-2020'}).getByRole('button',{name:'Списать'}).click();
   await modal.locator('[name=quantity]').fill('2'); await modal.locator('[name=reason]').fill('Истёк срок');
   check(JSON.parse(await modal.locator('[name=allocations]').inputValue()).reduce((n,x)=>n+x.quantity,0) === 2, 'Expired selected lot remains available for write-off');
@@ -85,12 +86,12 @@ async (page) => {
   check((await workspace()).purchases.length === 4, 'Backup import restores all purchases');
   // Import a known v2 fixture through the UI to exercise reconciliation; never touch any cloud account.
   await page.locator('input[type=file]').setInputFiles({name:'formatted-backup.json',mimeType:'application/json',buffer:Buffer.from(' '.repeat(1_100_000)+JSON.stringify({schemaVersion:3,workspace:await workspace()}))});await modal.getByRole('button',{name:'Восстановить учёт'}).click();await modal.waitFor({state:'hidden'});check((await workspace()).purchases.length>0,'Formatted backup larger than 1MB restores validated content');
-  const legacy = {schemaVersion:2,workspace:{models:[{id:'m',name:'Старый сенсор',color:'#526df4'}],purchases:[{id:'p',modelId:'m',date:'2020-01-01',quantity:3,unitPrice:10,extra:0.05,sold:0,expiry:'2099-12'}],sales:[{id:'s',modelId:'m',date:'2020-01-02',quantity:1,unitPrice:20,costBasis:0}]}};
+  const legacy = {schemaVersion:2,workspace:{models:[{id:'m',name:'Старый сенсор',color:'#526df4'}],purchases:[{id:'p',modelId:'m',date:'2020-01-01',quantity:3,unitPrice:10,extra:0.05,sold:0,expiry:'2099-12',note:'Старый комментарий'}],sales:[{id:'s',modelId:'m',date:'2020-01-02',quantity:1,unitPrice:20,costBasis:0,note:'Комментарий продажи'}]}};
   await page.locator('input[type=file]').setInputFiles({name:'legacy.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(legacy))}); await modal.getByRole('button',{name:'Восстановить учёт'}).click(); await modal.waitFor({state:'hidden'});
   await go('Операции'); await page.getByRole('button',{name:'Изменить закупку Старый сенсор'}).click();
   check(await modal.getByPlaceholder('ДД-ММ-ГГГГ').inputValue() === '31-12-2099', 'Legacy month shows its actual last-day deadline');
   await save(); await modal.waitFor({state:'hidden'});
-  check((await workspace()).purchases[0].expiry === '2099-12' && (await workspace()).purchases[0].extra === 0.05, 'Editing legacy purchase preserves original expiry and delivery costs');
+  check((await workspace()).purchases[0].expiry === '2099-12' && (await workspace()).purchases[0].extra === 0.05 && (await workspace()).purchases[0].note === 'Старый комментарий', 'Editing legacy purchase preserves original expiry, delivery costs and comment');
   await go('Настройки');
   if (!(await page.locator('.settings-advanced').evaluate(el => el.open))) await page.locator('.settings-advanced summary').click(); await page.getByLabel('Себестоимость').selectOption('lot');
   check((await page.locator('.reconciliation-list').innerText()).includes('Старый сенсор'), 'Legacy sales require explicit reconciliation');
@@ -98,7 +99,7 @@ async (page) => {
   await page.locator('.reconciliation-list').getByRole('button',{name:'Сверить'}).click();
   check((await modal.innerText()).includes('Исторические партии не подтверждены'), 'Historical allocation uncertainty shown');
   await modal.locator('.allocation-row input').first().fill('1'); await save(); await modal.waitFor({state:'hidden'});
-  check((await workspace()).sales[0].allocations[0].purchaseId === 'p', 'Reconciliation saves explicit historical lot');
+  check((await workspace()).sales[0].allocations[0].purchaseId === 'p' && (await workspace()).sales[0].note === 'Комментарий продажи', 'Reconciliation saves historical lot and preserves sale comment');
   await page.waitForFunction(() => !document.querySelector('.settings-advanced input[type=checkbox]').checked);
   check(!(await page.getByLabel('Я скачал резервную копию и подтверждаю пересчёт истории').isChecked()), 'Ledger changes invalidate method confirmation');
   if (!(await page.locator('.settings-advanced').evaluate(el => el.open))) await page.locator('.settings-advanced summary').click(); await page.getByLabel('Себестоимость').selectOption('lot');

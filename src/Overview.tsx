@@ -98,7 +98,7 @@ export function Overview({
       id: 'investments',
       label: 'Закуплено',
       amount: financeMonths === 'all' ? stats.investments : periodInvestments,
-      detail: `${purchasedQuantity} шт. · с доставкой`
+      detail: `${purchasedQuantity} шт.`
     },
     {
       id: 'stockValue',

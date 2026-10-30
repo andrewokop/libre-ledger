@@ -341,8 +341,8 @@ export function EntryForm({
           required
         />
       </label>
-      <div className="form-row">
-        {type !== 'sale' && <label className="form-label">
+      <div className={writeoff || (purchase && entry) ? "form-row" : "form-row form-row-single"}>
+        {(writeoff || (purchase && entry)) && <label className="form-label">
           Количество, шт.
           <input
             name="quantity"
@@ -362,7 +362,7 @@ export function EntryForm({
             required
           />
         </label>}
-        {type === 'sale' && <input type="hidden" name="quantity" value={totalQuantity} />}
+        {(type === 'sale' || (purchase && !entry)) && <input type="hidden" name="quantity" value={totalQuantity} />}
         {!writeoff && (
           <label className="form-label">
             Цена за штуку, ₽
@@ -554,18 +554,17 @@ export function EntryForm({
           )}
         </>
       )}
-      <label className="form-label">
-        Комментарий <span className="optional-label">необязательно</span>
-        <textarea
-          name="note"
-          maxLength={500}
-          rows={2}
-          defaultValue={entry?.note ?? ''}
-        />
-      </label>
+      {writeoff ? (
+        <label className="form-label">
+          Комментарий <span className="optional-label">необязательно</span>
+          <textarea name="note" maxLength={500} rows={2} defaultValue={entry?.note ?? ''} />
+        </label>
+      ) : (
+        <input type="hidden" name="note" value={entry?.note ?? ''} />
+      )}
       {purchase && (
         <div className="cost-preview" aria-live="polite">
-          <span>{purchase ? 'Закупка с доставкой' : 'Сумма продажи'}</span>
+          <span>Сумма закупки</span>
           <strong>
             {price === '' ? (
               'Укажите цену'
