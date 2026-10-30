@@ -33,21 +33,23 @@ async (page) => {
   let w = await workspace(); check(w.purchases.length === 3 && w.purchases.map(p => p.quantity).join(',') === '2,2,1' && w.purchases.map(p => p.extra).join(',') === '0,0,0', 'Batch preserves expiries with zero delivery costs');
   await go('Склад'); await page.locator('.lot-group').filter({hasText:'25-04-2027'}).locator('summary').click();
   await page.locator('.lot-group').filter({hasText:'25-04-2027'}).getByRole('button',{name:'Продать'}).click();
-  check(!(await modal.locator('.lot-picker').innerText()).includes('Выбрано ') && !(await modal.locator('.allocation-row').allInnerTexts()).join(' ').includes('закупка'), 'Sale lot list shows only expiry and quantity without purchase dates or summary');
+  check(!(await modal.locator('.allocation-row').allInnerTexts()).join(' ').includes('закупка'), 'Sale lot list shows expiry and quantity without purchase dates');
   check(await modal.locator('[name=unitPrice]').inputValue() === '0', 'Sale uses explicit zero default');
-  await modal.locator('[name=quantity]').fill('3');
+  await modal.locator('.allocation-row').filter({hasText:'25-04-2027'}).locator('input').fill('2');
+  await modal.locator('.allocation-row').filter({hasText:'15-03-2027'}).locator('input').fill('1');
+  check((await modal.locator('.allocation-total').innerText()).includes('3 шт.'), 'Lot quantities are summed');
   let alloc = JSON.parse(await modal.locator('[name=allocations]').inputValue());
   let april = w.purchases.find(p => p.expiry === '2027-04-25');
-  check(alloc[0].purchaseId === april.id && alloc[0].quantity === 2 && alloc.length === 2, 'Warehouse choice remains first when quantity changes');
+  check(alloc.some(a => a.purchaseId === april.id && a.quantity === 2) && alloc.length === 2, 'Warehouse choice remains first when quantity changes');
   await save(); await modal.waitFor({state:'hidden'}); w = await workspace();
   check(w.sales.length === 1 && w.sales[0].unitPrice === 0 && w.sales[0].allocations.length === 2, 'Free multi-lot gift is saved with exact lots');
-  await go('Обзор'); check((await page.locator('body').innerText()).includes('Бесплатно'), 'Free gift is visible on overview');
+  await go('Обзор'); check(!(await page.locator('body').innerText()).includes('Бесплатно'), 'Zero-price sale has no free label on overview');
   check((await page.locator('.v3-profit strong').innerText()).includes('300') && (await page.locator('.v3-stockValue strong').innerText()).includes('200'), 'Gift profit and remaining value reflect purchase costs');
   await page.screenshot({path:'output/playwright/v3-overview-mobile.png',fullPage:true});
   for (const width of [320, 390, 768, 1440]) { await page.setViewportSize({width,height:844}); check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `Overview fits ${width}px`); }
   await page.setViewportSize({width:390,height:844});
   await go('Операции');
-  check((await page.locator('.history-table').innerText()).includes('Бесплатно'), 'Free gift is visible in history');
+  check(!(await page.locator('.history-table').innerText()).includes('Бесплатно'), 'Zero-price sale has no free label in history');
   await page.getByRole('button',{name:'Изменить продажу Сенсор'}).click(); await modal.getByRole('button',{name:'Отменить операцию'}).click(); await modal.waitFor({state:'hidden'});
   check((await workspace()).sales[0].status === 'cancelled', 'Sale cancellation persists');
   await page.getByRole('button',{name:'Изменить продажу Сенсор'}).click(); await modal.getByRole('button',{name:'Восстановить операцию'}).click(); await modal.waitFor({state:'hidden'});

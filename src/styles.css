@@ -716,3 +716,5 @@ h2 { color: #30385c; font-size: 23px; font-weight: 600; letter-spacing: -.7px; l
 @media (max-width: 600px) {
   .inventory-summary > div:nth-child(2) { grid-column: 1 / -1; }
 }
+
+.allocation-total { border-top: 1px solid #dce2ef; margin-top: 12px; padding-top: 12px; font-weight: 700; color: #172341; }

@@ -255,14 +255,15 @@ export function EntryForm({
     if (entry && 'allocations' in entry && entry.allocations)
       return entry.allocations
     if (entry || purchase) return []
-    return proposeLots(modelId, date, quantity)
+    return type === 'sale' && !initialPurchaseId ? [] : proposeLots(modelId, date, quantity)
   })
   function propose(nextModel: string, nextDate: string, nextQuantity: string) {
     setAllocations(proposeLots(nextModel, nextDate, nextQuantity))
   }
   const available = lots.reduce((sum, lot) => sum + lot.remaining, 0)
+  const allocatedQuantity = allocations.reduce((sum, allocation) => sum + allocation.quantity, 0)
   const totalQuantity =
-    purchase && !entry && rows.length > 1
+    type === 'sale' ? allocatedQuantity : purchase && !entry && rows.length > 1
       ? rows.reduce((sum, row) => sum + (Number(row.quantity) || 0), 0)
       : Number(quantity)
   const total = totalQuantity * Number(price) + (purchase ? extra : 0)
@@ -299,7 +300,8 @@ export function EntryForm({
           value={modelId}
           onChange={(e) => {
             setModelId(e.target.value)
-            if (!purchase) propose(e.target.value, date, quantity)
+            if (writeoff) propose(e.target.value, date, quantity)
+            if (type === 'sale') setAllocations([])
             if (!entry && type === 'sale')
               setPrice(
                 models
@@ -333,13 +335,14 @@ export function EntryForm({
           value={date}
           onChange={(e) => {
             setDate(e.target.value)
-            if (!purchase) propose(modelId, e.target.value, quantity)
+            if (writeoff) propose(modelId, e.target.value, quantity)
+            if (type === 'sale') setAllocations([])
           }}
           required
         />
       </label>
       <div className="form-row">
-        <label className="form-label">
+        {type !== 'sale' && <label className="form-label">
           Количество, шт.
           <input
             name="quantity"
@@ -358,7 +361,8 @@ export function EntryForm({
             readOnly={purchase && !entry && rows.length > 1}
             required
           />
-        </label>
+        </label>}
+        {type === 'sale' && <input type="hidden" name="quantity" value={totalQuantity} />}
         {!writeoff && (
           <label className="form-label">
             Цена за штуку, ₽
@@ -374,13 +378,6 @@ export function EntryForm({
               onChange={(e) => setPrice(e.target.value)}
               required
             />
-            <button
-              className="text-link"
-              type="button"
-              onClick={() => setPrice('0')}
-            >
-              Бесплатно
-            </button>
           </label>
         )}
       </div>
@@ -499,7 +496,7 @@ export function EntryForm({
                 подтверждённых партий.
               </p>
             )}
-            {lots.map(({ purchase: lot, remaining }) => (
+            {lots.filter((lot) => lot.remaining > 0 || allocations.some((allocation) => allocation.purchaseId === lot.purchase.id)).map(({ purchase: lot, remaining }) => (
               <label className="allocation-row" key={lot.id}>
                 <span>
                   {expiryLabel(lot.expiry)}
@@ -529,6 +526,15 @@ export function EntryForm({
                 />
               </label>
             ))}
+            {type === 'sale' && (
+              <div className="allocation-total" aria-live="polite">
+                <span>Итого: {allocatedQuantity} шт.</span>
+                <div className="cost-preview">
+                  <span>Сумма продажи</span>
+                  <strong>{price === '' ? 'Укажите цену' : <Amount value={Number.isFinite(total) ? total : 0} />}</strong>
+                </div>
+              </div>
+            )}
             <input
               type="hidden"
               name="allocations"
@@ -557,7 +563,7 @@ export function EntryForm({
           defaultValue={entry?.note ?? ''}
         />
       </label>
-      {!writeoff && (
+      {purchase && (
         <div className="cost-preview" aria-live="polite">
           <span>{purchase ? 'Закупка с доставкой' : 'Сумма продажи'}</span>
           <strong>

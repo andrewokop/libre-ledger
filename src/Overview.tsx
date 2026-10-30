@@ -54,7 +54,6 @@ export function Overview({
   const periodWriteOffs = (workspace.writeOffs ?? []).filter(inPeriod)
   const salesQuantity = periodSales.reduce((sum, sale) => sum + sale.quantity, 0)
   const purchasedQuantity = periodPurchases.reduce((sum, purchase) => sum + purchase.quantity, 0)
-  const freeQuantity = periodSales.filter((sale) => sale.unitPrice === 0).reduce((sum, sale) => sum + sale.quantity, 0)
   const periodRevenue = periodSales.reduce((sum, sale) => sum + sale.quantity * sale.unitPrice, 0)
   const periodCost = [...periodSales.map((entry) => stats.movementCosts.get(`sale:${entry.id}`) ?? 0), ...periodWriteOffs.map((entry) => stats.movementCosts.get(`writeoff:${entry.id}`) ?? 0)].reduce((sum, cost) => sum + cost, 0)
   const periodInvestments = periodPurchases.reduce((sum, purchase) => sum + purchase.quantity * purchase.unitPrice + purchase.extra, 0)
@@ -93,7 +92,7 @@ export function Overview({
       id: 'revenue',
       label: 'Продано',
       amount: financeMonths === 'all' ? stats.revenue : periodRevenue,
-      detail: `${salesQuantity} шт.${freeQuantity ? ` · бесплатно ${freeQuantity} шт.` : ''}`
+      detail: `${salesQuantity} шт.`
     },
     {
       id: 'investments',
@@ -223,7 +222,7 @@ export function Overview({
         )}
         <div className="v3-chart-foot">
           <span>
-            По 7 дней · последний интервал может быть неполным · включая бесплатные передачи
+            По 7 дней · последний интервал может быть неполным
           </span>
           <button
             className="v3-link"
@@ -330,9 +329,6 @@ export function Overview({
                       : 'Закупка'}{' '}
                   · {movement.quantity} шт. · {shortDate(movement.date)}
                   {!isActive(movement) && ' · Отменена'}
-                  {movement.type === 'sale' &&
-                    movement.amount === 0 &&
-                    ' · Бесплатно'}
                 </span>
               </div>
               <strong className={!isActive(movement) ? 'v3-cancelled' : ''}>

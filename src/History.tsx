@@ -165,11 +165,6 @@ export function History({
                           .join(' · ')}
                       </small>
                     )}
-                  {movement.type !== 'writeoff' &&
-                    'unitPrice' in movement &&
-                    movement.unitPrice === 0 && (
-                      <small className="operation-note">Бесплатно</small>
-                    )}
                   {movement.type === 'writeoff' && 'reason' in movement && (
                     <small className="operation-note">{movement.reason}</small>
                   )}
