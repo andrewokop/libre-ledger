@@ -43,18 +43,16 @@ const workspace = (): Workspace => ({
 })
 
 describe('sales chart calendar periods', () => {
-  it('shows each elapsed day and distinguishes free sales from no events', () => {
+  it('groups the month into weeks and distinguishes free sales from no events', () => {
     const flow = salesFlow(workspace(), 1, '2026-10-28')
-    expect(flow.periods).toHaveLength(28)
-    expect(flow.periods[7]).toMatchObject({
-      start: '2026-10-08',
-      sales: 400,
-      quantity: 2,
-      count: 1
-    })
-    expect(flow.periods[27]).toMatchObject({ sales: 0, quantity: 3, count: 1 })
+    expect(flow.periods).toHaveLength(4)
+    expect(flow.periods[1]).toMatchObject({ start: '2026-10-08', sales: 400, quantity: 2, count: 1 })
+    expect(flow.periods[3]).toMatchObject({ sales: 0, quantity: 3, count: 1 })
     expect(flow.periods[0]).toMatchObject({ sales: 0, quantity: 0, count: 0 })
     expect(flow).toMatchObject({ sales: 400, quantity: 5, count: 2 })
+  })
+  it('covers two calendar months', () => {
+    expect(salesFlow(workspace(), 2, '2026-10-28').start).toBe('2026-09-01')
   })
   it('covers three calendar months in contiguous weeks through today', () => {
     const flow = salesFlow(workspace(), 3, '2026-10-28')

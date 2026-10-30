@@ -301,3 +301,14 @@
   overflow-wrap: anywhere;
   min-width: 0;
 }
+
+.v3-finance-range { margin: 12px 0 0; color: #4d5972; font-size: 16px; }
+@media (max-width: 600px) {
+  .v3-section-top { align-items: flex-start; flex-direction: column; }
+  .v3-finance-period { max-width: 100%; flex-wrap: wrap; }
+  .v3-finance-period button { padding: 0 10px; }
+}
+@media (max-width: 520px) {
+  .v3-chart-heading .v3-segment { max-width: 100%; flex-wrap: wrap; }
+  .v3-chart-heading .v3-segment button { padding: 0 10px; }
+}

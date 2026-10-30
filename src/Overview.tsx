@@ -39,21 +39,25 @@ export function Overview({
   const [chartMonths, setChartMonths] = useState<FlowMonths>(
     settings.chartMonths
   )
+  const [financeMonths, setFinanceMonths] = useState<1 | 2 | 3 | 'all'>('all')
   const [unit, setUnit] = useState<'rub' | 'quantity'>(settings.chartUnit)
   const currentDate = today()
   const flow = useMemo(
     () => salesFlow(workspace, chartMonths, currentDate),
     [workspace, chartMonths, currentDate]
   )
-  const salesQuantity = workspace.sales
-    .filter(isActive)
-    .reduce((sum, sale) => sum + sale.quantity, 0)
-  const purchasedQuantity = workspace.purchases
-    .filter(isActive)
-    .reduce((sum, purchase) => sum + purchase.quantity, 0)
-  const freeQuantity = workspace.sales
-    .filter((sale) => isActive(sale) && sale.unitPrice === 0)
-    .reduce((sum, sale) => sum + sale.quantity, 0)
+  const financeStart = financeMonths === 'all' ? '' : salesFlow(workspace, financeMonths, currentDate).start
+  const inPeriod = (entry: { date: string; status?: string }) =>
+    entry.status !== 'cancelled' && (!financeStart || (entry.date >= financeStart && entry.date <= currentDate))
+  const periodSales = workspace.sales.filter(inPeriod)
+  const periodPurchases = workspace.purchases.filter(inPeriod)
+  const periodWriteOffs = (workspace.writeOffs ?? []).filter(inPeriod)
+  const salesQuantity = periodSales.reduce((sum, sale) => sum + sale.quantity, 0)
+  const purchasedQuantity = periodPurchases.reduce((sum, purchase) => sum + purchase.quantity, 0)
+  const freeQuantity = periodSales.filter((sale) => sale.unitPrice === 0).reduce((sum, sale) => sum + sale.quantity, 0)
+  const periodRevenue = periodSales.reduce((sum, sale) => sum + sale.quantity * sale.unitPrice, 0)
+  const periodCost = [...periodSales.map((entry) => stats.movementCosts.get(`sale:${entry.id}`) ?? 0), ...periodWriteOffs.map((entry) => stats.movementCosts.get(`writeoff:${entry.id}`) ?? 0)].reduce((sum, cost) => sum + cost, 0)
+  const periodInvestments = periodPurchases.reduce((sum, purchase) => sum + purchase.quantity * purchase.unitPrice + purchase.extra, 0)
   const lowStock =
     settings.lowStockThreshold > 0
       ? workspace.models
@@ -84,24 +88,24 @@ export function Overview({
       expiryEnd(a.purchase.expiry!).localeCompare(expiryEnd(b.purchase.expiry!))
     )
   const metrics = [
-    { id: 'profit', label: 'Прибыль', amount: stats.profit, detail: '' },
+    { id: 'profit', label: 'Прибыль', amount: financeMonths === 'all' ? stats.profit : periodRevenue - periodCost, detail: '' },
     {
       id: 'revenue',
       label: 'Продано',
-      amount: stats.revenue,
+      amount: financeMonths === 'all' ? stats.revenue : periodRevenue,
       detail: `${salesQuantity} шт.${freeQuantity ? ` · бесплатно ${freeQuantity} шт.` : ''}`
     },
     {
       id: 'investments',
       label: 'Закуплено',
-      amount: stats.investments,
+      amount: financeMonths === 'all' ? stats.investments : periodInvestments,
       detail: `${purchasedQuantity} шт. · с доставкой`
     },
     {
       id: 'stockValue',
       label: 'На складе',
       amount: stats.stockValue,
-      detail: `${stats.quantity} шт.`
+      detail: `${stats.quantity} шт. · сейчас`
     }
   ]
   const orderedMetrics = [...metrics].sort(
@@ -113,12 +117,17 @@ export function Overview({
     <div className="overview-content v3-overview">
       <section
         className="v3-finance"
-        aria-label="Финансовые показатели за всё время"
+        aria-label="Финансовые показатели"
       >
         <div className="v3-section-top">
           <h2>Финансы</h2>
-          <span>За всё время</span>
+          <div className="v3-segment v3-finance-period" role="group" aria-label="Период финансов">
+            {([[1, '1 мес.'], [2, '2 мес.'], [3, '3 мес.'], ['all', 'Всё время']] as const).map(([value, label]) => (
+              <button key={value} aria-pressed={financeMonths === value} onClick={() => setFinanceMonths(value)}>{label}</button>
+            ))}
+          </div>
         </div>
+        <p className="v3-finance-range">{financeMonths === 'all' ? 'За всё время' : `${salesFlow(workspace, financeMonths, currentDate).range} · календарные месяцы`}</p>
         <div className="v3-metrics">
           {orderedMetrics.map((metric) => (
             <div
@@ -161,6 +170,7 @@ export function Overview({
             {(
               [
                 [1, '1 мес.'],
+                [2, '2 мес.'],
                 [3, '3 мес.'],
                 [6, '6 мес.']
               ] as const
@@ -213,8 +223,7 @@ export function Overview({
         )}
         <div className="v3-chart-foot">
           <span>
-            {chartMonths === 1 ? 'По дням' : 'По неделям'} · включая бесплатные
-            передачи
+            По 7 дней · последний интервал может быть неполным · включая бесплатные передачи
           </span>
           <button
             className="v3-link"

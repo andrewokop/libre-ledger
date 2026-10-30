@@ -1,6 +1,6 @@
 import { isActive, type Workspace } from './types'
 
-export type FlowMonths = 1 | 3 | 6
+export type FlowMonths = 1 | 2 | 3 | 6
 export type FlowPeriod = {
   key: string
   label: string
@@ -41,7 +41,7 @@ export function salesFlow(
   const periods: FlowPeriod[] = []
   for (let cursor = new Date(first); cursor <= endDate;) {
     const last = new Date(cursor)
-    last.setDate(last.getDate() + (months === 1 ? 0 : 6))
+    last.setDate(last.getDate() + 6)
     if (last > endDate) last.setTime(endDate.getTime())
     const from = dateKey(cursor),
       to = dateKey(last)

@@ -75,7 +75,7 @@ export default function FinanceChart({
             dataKey={unit === 'rub' ? 'sales' : 'quantity'}
             stroke="#3d4dc2"
             strokeWidth={3}
-            dot={false}
+            dot={data.length === 1 ? { r: 4, fill: '#3d4dc2' } : false}
             activeDot={{
               r: 5,
               fill: '#fff',
